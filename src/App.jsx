@@ -7,7 +7,7 @@ const useWebSocket = (sessionId, role) => {
 
   useEffect(() => {
     if (sessionId && role) {
-      ws.current = new WebSocket('ws://localhost:3001');
+      ws.current = new WebSocket('ws://https://magix-trix.onrender.com');
       ws.current.onopen = () => {
         console.log('WebSocket Connected');
         ws.current.send(JSON.stringify({ type: 'join', sessionId, role }));
