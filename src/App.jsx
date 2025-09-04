@@ -17,9 +17,8 @@ const useWebSocket = (sessionId, role) => {
 
       ws.current.onmessage = (event) => {
         const data = JSON.parse(event.data);
-
         if (data.type === 'transcript' && role === 'magician') {
-          console.log("📜 Transcript received:", data.word); // ✅ FRONTEND log
+          console.log("📜 Transcript received:", data.word);
           setTranscript(data.word);
 
           if (navigator.vibrate) navigator.vibrate(200);
@@ -32,7 +31,7 @@ const useWebSocket = (sessionId, role) => {
     }
   }, [sessionId, role]);
 
-  return { ws, transcript };
+  return { ws, transcript }; // return ref, not ws.current
 };
 
 // Main App Component
