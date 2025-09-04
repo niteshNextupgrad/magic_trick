@@ -46,23 +46,33 @@ function App() {
     window.location.href = `?role=magician&session=${newSessionId}`;
   };
   const getSpectatorLink = () => `${window.location.origin}${window.location.pathname}?role=spectator&session=${sessionId}`;
-  const startRecording = async () => {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorderRef.current = new MediaRecorder(stream);
-        mediaRecorderRef.current.ondataavailable = (event) => {
-          if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
-            ws.send(event.data);
-          }
-        };
-        mediaRecorderRef.current.start(250);
-        setIsRecording(true);
-      } catch (error) {
-        alert("Could not access the microphone. Please grant permission.");
-      }
+ const startRecording = async () => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    try {
+      console.log("Requesting microphone access...");
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log("Microphone access granted ✅");
+
+      // Explicitly request a supported mimeType
+      const options = { mimeType: 'audio/webm;codecs=opus' };
+
+      mediaRecorderRef.current = new MediaRecorder(stream, options);
+
+      mediaRecorderRef.current.ondataavailable = (event) => {
+        if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
+          ws.send(event.data);
+        }
+      };
+
+      mediaRecorderRef.current.start(250); // send chunks every 250ms
+      setIsRecording(true);
+    } catch (error) {
+      console.error("Mic error:", error);
+      alert("Could not access the microphone. Please allow microphone permissions.");
     }
-  };
+  }
+};
+
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
