@@ -47,22 +47,24 @@ function App() {
   };
   const getSpectatorLink = () => `${window.location.origin}${window.location.pathname}?role=spectator&session=${sessionId}`;
   const startRecording = async () => {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorderRef.current = new MediaRecorder(stream);
-        mediaRecorderRef.current.ondataavailable = (event) => {
-          if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
-            ws.send(event.data);
-          }
-        };
-        mediaRecorderRef.current.start(250);
-        setIsRecording(true);
-      } catch (error) {
-        alert("Could not access the microphone. Please grant permission.");
-      }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorderRef.current = new MediaRecorder(stream);
+
+      mediaRecorderRef.current.ondataavailable = (event) => {
+        if (event.data.size > 0 && ws?.readyState === WebSocket.OPEN) {
+          ws.send(event.data);
+        }
+      };
+
+      mediaRecorderRef.current.start(250);
+      setIsRecording(true);
+    } catch (error) {
+      console.error(error);
+      alert("Could not access the microphone. Please grant permission.");
     }
   };
+
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
