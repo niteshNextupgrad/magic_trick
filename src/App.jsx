@@ -7,21 +7,39 @@ const useWebSocket = (sessionId, role) => {
 
   useEffect(() => {
     if (sessionId && role) {
-      ws.current = new WebSocket('ws://https://magix-trix.onrender.com');
+      // Use secure websocket when deployed
+      const WS_URL =
+        process.env.NODE_ENV === "production"
+          ? "wss://magix-trix.onrender.com"
+          : "ws://localhost:3001";
+
+      ws.current = new WebSocket(WS_URL);
+
       ws.current.onopen = () => {
-        console.log('WebSocket Connected');
-        ws.current.send(JSON.stringify({ type: 'join', sessionId, role }));
-      }; ws.current.onmessage = (event) => {
+        console.log("WebSocket Connected");
+        ws.current.send(
+          JSON.stringify({ type: "join", sessionId, role })
+        );
+      };
+
+      ws.current.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        if (data.type === 'transcript' && role === 'magician') {
-          setTranscript(data.word); if (navigator.vibrate) {
+        if (data.type === "transcript" && role === "magician") {
+          setTranscript(data.word);
+
+          if (navigator.vibrate) {
             navigator.vibrate(200);
           }
         }
-      }; ws.current.onclose = () => console.log('WebSocket Disconnected');
+      };
+
+      ws.current.onclose = () =>
+        console.log("WebSocket Disconnected");
+
       return () => ws.current.close();
     }
   }, [sessionId, role]);
+
   return { ws: ws.current, transcript };
 };
 
