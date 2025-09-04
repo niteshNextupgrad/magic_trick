@@ -5,6 +5,7 @@ import './App.css';
 const useWebSocket = (sessionId, role) => {
   const ws = useRef(null);
   const [transcript, setTranscript] = useState('');
+  const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const reconnectInterval = useRef(null);
 
   useEffect(() => {
@@ -15,34 +16,52 @@ const useWebSocket = (sessionId, role) => {
 
         ws.current.onopen = () => {
           console.log('✅ WebSocket Connected');
+          setConnectionStatus('connected');
           clearInterval(reconnectInterval.current);
           ws.current.send(JSON.stringify({ type: 'join', sessionId, role }));
         };
 
         ws.current.onmessage = (event) => {
-          const data = JSON.parse(event.data);
-          console.log("📩 Received message:", data);
-          
-          if (data.type === 'transcript' && role === 'magician') {
-            console.log("📜 Full transcript received:", data.word);
-            setTranscript(data.word);
-
-            if (navigator.vibrate) navigator.vibrate(200);
-          }
-          
-          if (data.type === 'error') {
-            console.error("❌ Server error:", data.message);
+          try {
+            const data = JSON.parse(event.data);
+            console.log("📩 Received message:", data);
+            
+            if (data.type === 'transcript' && role === 'magician') {
+              console.log("📜 Full transcript received:", data.word);
+              setTranscript(data.word);
+              if (navigator.vibrate) navigator.vibrate(200);
+            }
+            
+            if (data.type === 'transcript_sent' && role === 'spectator') {
+              console.log("✅ Transcript sent to magician:", data.word);
+            }
+            
+            if (data.type === 'error') {
+              console.error("❌ Server error:", data.message);
+            }
+            
+            if (data.type === 'joined') {
+              console.log("✅ Successfully joined session:", data.sessionId);
+            }
+            
+            if (data.type === 'deepgram_ready') {
+              console.log("✅ Deepgram is ready for speech recognition");
+            }
+          } catch (error) {
+            console.error("❌ Error parsing message:", error, event.data);
           }
         };
 
         ws.current.onclose = () => {
           console.log('❌ WebSocket Disconnected');
+          setConnectionStatus('disconnected');
           // Attempt to reconnect every 3 seconds
           reconnectInterval.current = setInterval(connect, 3000);
         };
 
         ws.current.onerror = (error) => {
           console.error('❌ WebSocket error:', error);
+          setConnectionStatus('error');
         };
       };
       
@@ -55,7 +74,7 @@ const useWebSocket = (sessionId, role) => {
     }
   }, [sessionId, role]);
 
-  return { ws, transcript };
+  return { ws, transcript, connectionStatus };
 };
 
 // Main App Component
@@ -63,7 +82,6 @@ function App() {
   const [role, setRole] = useState(null);
   const [sessionId, setSessionId] = useState('');
   const [isRecording, setIsRecording] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const mediaRecorderRef = useRef(null);
 
   // Parse URL for role/session
@@ -77,23 +95,7 @@ function App() {
     }
   }, []);
 
-  const { ws, transcript } = useWebSocket(sessionId, role);
-
-  // Update connection status based on WebSocket state
-  useEffect(() => {
-    if (ws.current) {
-      const updateStatus = () => {
-        setConnectionStatus(
-          ws.current.readyState === WebSocket.OPEN ? 'connected' : 
-          ws.current.readyState === WebSocket.CONNECTING ? 'connecting' : 'disconnected'
-        );
-      };
-      
-      updateStatus();
-      const interval = setInterval(updateStatus, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [ws.current]);
+  const { ws, transcript, connectionStatus } = useWebSocket(sessionId, role);
 
   // Create a new session as magician
   const createSession = () => {
@@ -116,7 +118,13 @@ function App() {
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
       try {
         console.log("🎤 Requesting microphone access...");
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            channelCount: 1,
+            sampleRate: 48000,
+            sampleSize: 16
+          } 
+        });
         console.log("✅ Microphone access granted");
 
         mediaRecorderRef.current = new MediaRecorder(stream, {
@@ -140,6 +148,7 @@ function App() {
       }
     } else {
       console.warn("⚠️ WebSocket not open, cannot record.");
+      console.log("WebSocket state:", ws.current ? ws.current.readyState : "no WebSocket");
     }
   };
 
@@ -194,6 +203,14 @@ function App() {
             alt="Spectator QR Code"
           />
         </div>
+        
+        <div className="debug-info">
+          <h3>Debug Information</h3>
+          <p>Session ID: {sessionId}</p>
+          <p>Role: {role}</p>
+          <p>Connection: {connectionStatus}</p>
+          <p>Last word: {transcript || "None yet"}</p>
+        </div>
       </div>
     );
   }
@@ -224,6 +241,14 @@ function App() {
         </button>
         
         {isRecording && <p className="recording-status">Recording... Speak now</p>}
+        
+        <div className="debug-info">
+          <h3>Debug Information</h3>
+          <p>Session ID: {sessionId}</p>
+          <p>Role: {role}</p>
+          <p>Connection: {connectionStatus}</p>
+          <p>Recording: {isRecording ? "Yes" : "No"}</p>
+        </div>
       </div>
     );
   }
