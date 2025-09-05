@@ -8,7 +8,7 @@ const useWebSocket = (sessionId, role) => {
 
   useEffect(() => {
     if (sessionId && role) {
-      ws.current = new WebSocket("wss://your-backend-server.com"); // <- Replace with your backend
+      ws.current = new  WebSocket("wss://magix-trix.onrender.com");
 
       ws.current.onopen = () => {
         console.log('✅ WebSocket Connected');
