@@ -30,27 +30,27 @@ const useWebSocket = (sessionId, role) => {
             console.log("📩 Received message:", data);
 
             if (data.type === 'transcript' && role === 'magician') {
-              console.log("📜 Full transcript received:", data.word);
+              console.log("Full transcript received:", data.word);
               setTranscript(data.word);
               if (navigator.vibrate) navigator.vibrate(200);
             }
 
             if (data.type === 'joined') {
-              console.log("✅ Successfully joined session:", data.sessionId);
+              console.log("Successfully joined session:", data.sessionId);
             }
           } catch (error) {
-            console.error("❌ Error parsing message:", error, event.data);
+            console.error("Error parsing message:", error, event.data);
           }
         };
 
         ws.current.onclose = () => {
-          console.log('❌ WebSocket Disconnected');
+          console.log('WebSocket Disconnected');
           setConnectionStatus('disconnected');
           reconnectInterval.current = setInterval(connect, 3000);
         };
 
         ws.current.onerror = (error) => {
-          console.error('❌ WebSocket error:', error);
+          console.error('WebSocket error:', error);
           setConnectionStatus('error');
         };
       };
@@ -72,6 +72,7 @@ function App() {
   const [role, setRole] = useState(null);
   const [sessionId, setSessionId] = useState('');
   const [transcript, setTranscript] = useState('');
+  const silenceTimerRef = useRef(null);
 
   // Speech recognition hook
   const {
@@ -95,6 +96,31 @@ function App() {
     }
   }, []);
 
+  // Auto-stop after 5 seconds of silence
+  useEffect(() => {
+    if (listening) {
+      // Clear any existing timer
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+      }
+
+      // Set new timer to stop after 5 seconds of no speech
+      silenceTimerRef.current = setTimeout(() => {
+        if (listening) {
+          console.log('⏰ No speech detected for 5 seconds, stopping...');
+          stopListening();
+        }
+      }, 5000); // 5 seconds
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+      }
+    };
+  }, [listening, speechTranscript]); // Reset timer when speech is detected
+
   // Send transcript to magician when speech is detected
   useEffect(() => {
     if (role === 'spectator' && speechTranscript && ws.current && ws.current.readyState === WebSocket.OPEN) {
@@ -104,9 +130,19 @@ function App() {
         timestamp: Date.now()
       });
       ws.current.send(message);
-      console.log('🎯 Sent transcript:', speechTranscript);
+      console.log('Sent transcript:', speechTranscript);
+
+      // Reset silence timer when speech is detected
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = setTimeout(() => {
+          if (listening) {
+            stopListening();
+          }
+        }, 10000);
+      }
     }
-  }, [speechTranscript, role, ws]);
+  }, [speechTranscript, role, ws, listening]);
 
   // Handle incoming transcripts (for magician)
   useEffect(() => {
@@ -152,11 +188,11 @@ function App() {
   const startListening = async () => {
     try {
       // First request microphone permission
-      await navigator.mediaDevices.getUserMedia({ audio: true });
+      // await navigator.mediaDevices.getUserMedia({ audio: true });
       console.log('✅ Microphone permission granted');
 
-      // Then start speech recognition
-      SpeechRecognition.startListening({ continuous: true });
+      // Then start speech recognition (NOT continuous)
+      SpeechRecognition.startListening(); // Remove { continuous: true }
     } catch (error) {
       console.error('❌ Microphone access denied:', error);
       alert('Please allow microphone permissions to use speech recognition');
@@ -167,6 +203,12 @@ function App() {
   const stopListening = () => {
     SpeechRecognition.stopListening();
     resetTranscript();
+
+    // Clear the silence timer
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
   };
 
   // Send test message
@@ -223,16 +265,6 @@ function App() {
             alt="Spectator QR Code"
           />
         </div>
-
-        <div className="test-buttons">
-          <h3>Test (For Debugging)</h3>
-          <button onClick={() => sendTestMessage("Hello Magician!")} className="test-button">
-            Test: Hello
-          </button>
-          <button onClick={() => sendTestMessage("Abracadabra!")} className="test-button">
-            Test: Abracadabra
-          </button>
-        </div>
       </div>
     );
   }
@@ -247,18 +279,6 @@ function App() {
       );
     }
 
-    if (!isMicrophoneAvailable) {
-      return (
-        <div className="container center">
-          <h1>Microphone Access Required</h1>
-          <p>Please allow microphone permissions in your browser settings.</p>
-          <button onClick={() => window.location.reload()} className="role-button">
-            Reload After Granting Permission
-          </button>
-        </div>
-      );
-    }
-
     return (
       <div className="container center spectator-view">
         <div className="header">
@@ -269,28 +289,23 @@ function App() {
         </div>
 
         <h1>Speak a Word</h1>
-        <p>Press and hold the button, speak clearly, then release</p>
+        <p>Click the button, speak clearly, then it will auto-stop after 10 seconds</p>
 
-        <button
-          className={`record-button ${listening ? 'recording' : ''}`}
-          onMouseDown={startListening}
-          onTouchStart={startListening}
-          onMouseUp={stopListening}
-          onTouchEnd={stopListening}
-          aria-label={listening ? 'Stop listening' : 'Start listening'}
-        >
-          {listening ? '🎤🔴' : '🎤'}
-        </button>
+        <div className="recording-controls">
+          <button
+            onClick={listening ? stopListening : startListening}
+            className={`control-button ${listening ? 'stop-button' : 'start-button'}`}
+          >
+            {listening ? '⏹️ Stop Listening' : '🎤 Start Speaking'}
+          </button>
+        </div>
 
-        {listening ? (
+        {listening && (
           <div className="listening-status">
-            <p>🎧 Listening... Speak now</p>
             <div className="current-transcript">
               {speechTranscript || "Waiting for speech..."}
             </div>
           </div>
-        ) : (
-          <p className="instruction">Release the button when done speaking</p>
         )}
 
         <div className="test-buttons">
@@ -298,7 +313,7 @@ function App() {
           <button onClick={() => sendTestMessage("this is a normal test message!")} className="test-button">
             Send Test Message
           </button>
-          <button onClick={() => sendTestMessage("this is a normal MAGIC WORD tes message")} className="test-button">
+          <button onClick={() => sendTestMessage("this is a normal MAGIC WORD test message")} className="test-button">
             Send Magic Word
           </button>
         </div>
