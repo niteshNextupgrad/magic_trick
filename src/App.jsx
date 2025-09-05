@@ -59,6 +59,7 @@ const useWebSocket = (sessionId, role) => {
   return { ws, connectionStatus };
 };
 
+
 // Main App Component
 function App() {
   const [role, setRole] = useState(null);
@@ -68,17 +69,19 @@ function App() {
 
   // Check microphone availability
   useEffect(() => {
-    const checkMicrophone = async () => {
-      try {
-        await navigator.mediaDevices.getUserMedia({ audio: true });
-        setIsMicAvailable(true);
-      } catch (error) {
-        console.warn('Microphone not available:', error);
-        setIsMicAvailable(false);
-      }
-    };
-    checkMicrophone();
-  }, []);
+    if (role === 'spectator') {
+      const checkMicrophone = async () => {
+        try {
+          await navigator.mediaDevices.getUserMedia({ audio: true });
+          setIsMicAvailable(true);
+        } catch (error) {
+          console.warn('Microphone not available:', error);
+          setIsMicAvailable(false);
+        }
+      };
+      checkMicrophone();
+    }
+  }, [role]);
 
   // Speech recognition hook
   const {
