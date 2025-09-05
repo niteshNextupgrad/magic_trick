@@ -292,8 +292,6 @@ function App() {
             Send Magic Word
           </button>
         </div>
-
-  
       </div>
     );
   }
