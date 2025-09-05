@@ -12,10 +12,7 @@ const useWebSocket = (sessionId, role) => {
     if (sessionId && role) {
       const connect = () => {
         console.log('🔄 Attempting WebSocket connection...');
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = process.env.NODE_ENV === 'production'
-          ? "wss://magix-trix.onrender.com"
-          : `${protocol}//${window.location.hostname}:3001`;
+        const wsUrl =  "wss://magix-trix.onrender.com"
 
         ws.current = new WebSocket(wsUrl);
 
