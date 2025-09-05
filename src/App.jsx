@@ -106,7 +106,7 @@ function App() {
   useEffect(() => {
     if (role === 'spectator' && speechTranscript && ws.current && ws.current.readyState === WebSocket.OPEN) {
       const message = JSON.stringify({
-        type: 'transcript',
+        type: 'test',
         word: speechTranscript,
         timestamp: Date.now()
       });
