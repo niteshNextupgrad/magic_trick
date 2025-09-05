@@ -12,8 +12,11 @@ const useWebSocket = (sessionId, role) => {
     if (sessionId && role) {
       const connect = () => {
         console.log('🔄 Attempting WebSocket connection...');
-        const wsUrl =  "wss://magix-trix.onrender.com"
-
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = process.env.NODE_ENV === 'production' 
+          ? "wss://magix-trix.onrender.com" 
+          : `${protocol}//${window.location.hostname}:3001`;
+        
         ws.current = new WebSocket(wsUrl);
 
         ws.current.onopen = () => {
@@ -43,9 +46,9 @@ const useWebSocket = (sessionId, role) => {
           setConnectionStatus('error');
         };
       };
-
+      
       connect();
-
+      
       return () => {
         clearInterval(reconnectInterval.current);
         if (ws.current) ws.current.close();
@@ -61,13 +64,29 @@ function App() {
   const [role, setRole] = useState(null);
   const [sessionId, setSessionId] = useState('');
   const [transcript, setTranscript] = useState('');
+  const [isMicAvailable, setIsMicAvailable] = useState(false);
+
+  // Check microphone availability
+  useEffect(() => {
+    const checkMicrophone = async () => {
+      try {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+        setIsMicAvailable(true);
+      } catch (error) {
+        console.warn('Microphone not available:', error);
+        setIsMicAvailable(false);
+      }
+    };
+    checkMicrophone();
+  }, []);
 
   // Speech recognition hook
   const {
     transcript: speechTranscript,
     listening,
     resetTranscript,
-    browserSupportsSpeechRecognition
+    browserSupportsSpeechRecognition,
+    isMicrophoneAvailable
   } = useSpeechRecognition();
 
   const { ws, connectionStatus } = useWebSocket(sessionId, role);
@@ -93,9 +112,8 @@ function App() {
       });
       ws.current.send(message);
       console.log('🎯 Sent transcript:', speechTranscript);
-      resetTranscript();
     }
-  }, [speechTranscript, role, ws, resetTranscript]);
+  }, [speechTranscript, role, ws]);
 
   // Handle incoming transcripts (for magician)
   useEffect(() => {
@@ -113,7 +131,11 @@ function App() {
       };
 
       ws.current.addEventListener('message', handleMessage);
-      return () => ws.current.removeEventListener('message', handleMessage);
+      return () => {
+        if (ws.current) {
+          ws.current.removeEventListener('message', handleMessage);
+        }
+      };
     }
   }, [role, ws]);
 
@@ -133,13 +155,15 @@ function App() {
     alert('Link copied to clipboard!');
   };
 
-  // Start/stop listening
-  const toggleListening = () => {
-    if (listening) {
-      SpeechRecognition.stopListening();
-    } else {
-      SpeechRecognition.startListening({ continuous: true });
-    }
+  // Start listening
+  const startListening = () => {
+    SpeechRecognition.startListening({ continuous: true });
+  };
+
+  // Stop listening
+  const stopListening = () => {
+    SpeechRecognition.stopListening();
+    resetTranscript();
   };
 
   // Send test message
@@ -152,6 +176,11 @@ function App() {
       });
       ws.current.send(testMessage);
       console.log('🧪 Sent test message:', message);
+      
+      // Also update local transcript for immediate feedback
+      if (role === 'magician') {
+        setTranscript(message);
+      }
     }
   };
 
@@ -177,7 +206,7 @@ function App() {
             Status: {connectionStatus}
           </div>
         </div>
-
+        
         <h2>The Secret Word</h2>
         <div className="transcript-box">
           {transcript ? <h1>"{transcript}"</h1> : <p>Waiting for the spectator to speak a word...</p>}
@@ -196,6 +225,16 @@ function App() {
             alt="Spectator QR Code"
           />
         </div>
+
+        <div className="test-buttons">
+          <h3>Test (For Debugging)</h3>
+          <button onClick={() => sendTestMessage("Hello Magician!")} className="test-button">
+            Test: Hello
+          </button>
+          <button onClick={() => sendTestMessage("Abracadabra!")} className="test-button">
+            Test: Abracadabra
+          </button>
+        </div>
       </div>
     );
   }
@@ -205,7 +244,19 @@ function App() {
       return (
         <div className="container center">
           <h1>Browser Not Supported</h1>
-          <p>Your browser does not support speech recognition. Please use Chrome, Edge, or Safari.</p>
+          <p>Please use Chrome, Edge, or Safari for speech recognition.</p>
+        </div>
+      );
+    }
+
+    if (!isMicrophoneAvailable || !isMicAvailable) {
+      return (
+        <div className="container center">
+          <h1>Microphone Access Required</h1>
+          <p>Please allow microphone permissions in your browser settings.</p>
+          <button onClick={() => window.location.reload()} className="role-button">
+            Reload After Granting Permission
+          </button>
         </div>
       );
     }
@@ -218,39 +269,51 @@ function App() {
             Status: {connectionStatus}
           </div>
         </div>
-
+        
         <h1>Speak a Word</h1>
-        <p>Click the button and speak clearly into your microphone</p>
+        <p>Press and hold the button, speak clearly, then release</p>
 
         <button
           className={`record-button ${listening ? 'recording' : ''}`}
-          onClick={toggleListening}
+          onMouseDown={startListening}
+          onTouchStart={startListening}
+          onMouseUp={stopListening}
+          onTouchEnd={stopListening}
           aria-label={listening ? 'Stop listening' : 'Start listening'}
         >
           {listening ? '🎤🔴' : '🎤'}
-          <span>{listening ? ' Stop' : ' Speak'}</span>
         </button>
-
-        {listening && (
+        
+        {listening ? (
           <div className="listening-status">
             <p>🎧 Listening... Speak now</p>
-            <p className="current-text">{speechTranscript || "Waiting for speech..."}</p>
+            <div className="current-transcript">
+              {speechTranscript || "Waiting for speech..."}
+            </div>
           </div>
+        ) : (
+          <p className="instruction">Release the button when done speaking</p>
         )}
 
         <div className="test-buttons">
           <h3>Test Messages</h3>
-          <button onClick={() => sendTestMessage("Hello Magician!")} className="test-button">
-            Send "Hello"
+          <button onClick={() => sendTestMessage("TEST: Hello Magician!")} className="test-button">
+            Send Test Message
           </button>
-          <button onClick={() => sendTestMessage("Abracadabra!")} className="test-button">
-            Send "Abracadabra"
-          </button>
-          <button onClick={() => sendTestMessage("The secret word is...")} className="test-button">
-            Send "Secret Word"
+          <button onClick={() => sendTestMessage("TEST: Magic Word!")} className="test-button">
+            Send Magic Word
           </button>
         </div>
 
+        <div className="instructions">
+          <h3>How to Use:</h3>
+          <ol>
+            <li>Press and hold the microphone button</li>
+            <li>Speak clearly into your microphone</li>
+            <li>Release the button when done</li>
+            <li>Your words will magically appear to the magician!</li>
+          </ol>
+        </div>
       </div>
     );
   }
