@@ -5,6 +5,7 @@ import './App.css';
 // WebSocket connection hook
 const useWebSocket = (sessionId, role) => {
   const ws = useRef(null);
+  const [transcript, setTranscript] = useState('');
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const reconnectInterval = useRef(null);
 
@@ -12,10 +13,7 @@ const useWebSocket = (sessionId, role) => {
     if (sessionId && role) {
       const connect = () => {
         console.log('🔄 Attempting WebSocket connection...');
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = process.env.NODE_ENV === 'production'
-          ? "wss://magix-trix.onrender.com"
-          : `${protocol}//${window.location.hostname}:3001`;
+        const wsUrl = "wss://magix-trix.onrender.com"
 
         ws.current = new WebSocket(wsUrl);
 
@@ -30,6 +28,16 @@ const useWebSocket = (sessionId, role) => {
           try {
             const data = JSON.parse(event.data);
             console.log("📩 Received message:", data);
+
+            if (data.type === 'transcript' && role === 'magician') {
+              console.log("📜 Full transcript received:", data.word);
+              setTranscript(data.word);
+              if (navigator.vibrate) navigator.vibrate(200);
+            }
+
+            if (data.type === 'joined') {
+              console.log("✅ Successfully joined session:", data.sessionId);
+            }
           } catch (error) {
             console.error("❌ Error parsing message:", error, event.data);
           }
@@ -56,32 +64,14 @@ const useWebSocket = (sessionId, role) => {
     }
   }, [sessionId, role]);
 
-  return { ws, connectionStatus };
+  return { ws, transcript, connectionStatus };
 };
-
 
 // Main App Component
 function App() {
   const [role, setRole] = useState(null);
   const [sessionId, setSessionId] = useState('');
   const [transcript, setTranscript] = useState('');
-  const [isMicAvailable, setIsMicAvailable] = useState(false);
-
-  // Check microphone availability
-  useEffect(() => {
-    if (role === 'spectator') {
-      const checkMicrophone = async () => {
-        try {
-          await navigator.mediaDevices.getUserMedia({ audio: true });
-          setIsMicAvailable(true);
-        } catch (error) {
-          console.warn('Microphone not available:', error);
-          setIsMicAvailable(false);
-        }
-      };
-      checkMicrophone();
-    }
-  }, [role]);
 
   // Speech recognition hook
   const {
@@ -179,11 +169,6 @@ function App() {
       });
       ws.current.send(testMessage);
       console.log('🧪 Sent test message:', message);
-
-      // Also update local transcript for immediate feedback
-      if (role === 'magician') {
-        setTranscript(message);
-      }
     }
   };
 
@@ -252,7 +237,7 @@ function App() {
       );
     }
 
-    if (!isMicrophoneAvailable || !isMicAvailable) {
+    if (!isMicrophoneAvailable) {
       return (
         <div className="container center">
           <h1>Microphone Access Required</h1>
@@ -300,23 +285,15 @@ function App() {
 
         <div className="test-buttons">
           <h3>Test Messages</h3>
-          <button onClick={() => sendTestMessage("TEST: Hello Magician!")} className="test-button">
+          <button onClick={() => sendTestMessage("this is a normal test message!")} className="test-button">
             Send Test Message
           </button>
-          <button onClick={() => sendTestMessage("TEST: Magic Word!")} className="test-button">
+          <button onClick={() => sendTestMessage("this is a normal MAGIC WORD tes message")} className="test-button">
             Send Magic Word
           </button>
         </div>
 
-        <div className="instructions">
-          <h3>How to Use:</h3>
-          <ol>
-            <li>Press and hold the microphone button</li>
-            <li>Speak clearly into your microphone</li>
-            <li>Release the button when done</li>
-            <li>Your words will magically appear to the magician!</li>
-          </ol>
-        </div>
+  
       </div>
     );
   }
