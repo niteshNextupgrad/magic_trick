@@ -107,11 +107,11 @@ function App() {
     if (role === 'spectator' && speechTranscript && ws.current && ws.current.readyState === WebSocket.OPEN) {
       const message = JSON.stringify({
         type: 'test',
-        message: speechTranscript, // ← Change 'word' to 'message'
+        message: speechTranscript,
         timestamp: Date.now()
       });
       ws.current.send(message);
-      console.log('🎯 Sent test transcript:', speechTranscript);
+      console.log('🎯 Sent transcript:', speechTranscript);
     }
   }, [speechTranscript, role, ws]);
 
@@ -171,13 +171,19 @@ function App() {
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
       const testMessage = JSON.stringify({
         type: 'test',
-        message: message, 
+        message: message,
         timestamp: Date.now()
       });
       ws.current.send(testMessage);
       console.log('🧪 Sent test message:', message);
+
+      // Also update local transcript for immediate feedback
+      if (role === 'magician') {
+        setTranscript(message);
+      }
     }
   };
+
   // UI rendering
   if (!role) {
     return (
