@@ -14,11 +14,7 @@ const useWebSocket = (sessionId, role) => {
     if (sessionId && role) {
       const connect = () => {
         console.log('🔄 Attempting WebSocket connection...');
-        // Use wss for production, ws for local development
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = process.env.NODE_ENV === 'production'
-          ? "wss://magix-trix.onrender.com"
-          : `${protocol}//${window.location.hostname}:3001`;
+        const wsUrl = "wss://magix-trix.onrender.com";
 
         ws.current = new WebSocket(wsUrl);
 
@@ -184,7 +180,7 @@ function App() {
             try {
               const testMessage = JSON.stringify({
                 type: "test",
-                message: "NITESH VERMA",
+                message: "hello this is a test message....",
                 timestamp: Date.now()
               });
               ws.current.send(testMessage);
