@@ -13,10 +13,10 @@ const useWebSocket = (sessionId, role) => {
       const connect = () => {
         console.log('🔄 Attempting WebSocket connection...');
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = process.env.NODE_ENV === 'production' 
-          ? "wss://magix-trix.onrender.com" 
+        const wsUrl = process.env.NODE_ENV === 'production'
+          ? "wss://magix-trix.onrender.com"
           : `${protocol}//${window.location.hostname}:3001`;
-        
+
         ws.current = new WebSocket(wsUrl);
 
         ws.current.onopen = () => {
@@ -46,9 +46,9 @@ const useWebSocket = (sessionId, role) => {
           setConnectionStatus('error');
         };
       };
-      
+
       connect();
-      
+
       return () => {
         clearInterval(reconnectInterval.current);
         if (ws.current) ws.current.close();
@@ -107,7 +107,7 @@ function App() {
     if (role === 'spectator' && speechTranscript && ws.current && ws.current.readyState === WebSocket.OPEN) {
       const message = JSON.stringify({
         type: 'test',
-        word: speechTranscript,
+        message: speechTranscript,
         timestamp: Date.now()
       });
       ws.current.send(message);
@@ -171,12 +171,12 @@ function App() {
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
       const testMessage = JSON.stringify({
         type: 'test',
-        word: message,
+        message: message,
         timestamp: Date.now()
       });
       ws.current.send(testMessage);
       console.log('🧪 Sent test message:', message);
-      
+
       // Also update local transcript for immediate feedback
       if (role === 'magician') {
         setTranscript(message);
@@ -206,7 +206,7 @@ function App() {
             Status: {connectionStatus}
           </div>
         </div>
-        
+
         <h2>The Secret Word</h2>
         <div className="transcript-box">
           {transcript ? <h1>"{transcript}"</h1> : <p>Waiting for the spectator to speak a word...</p>}
@@ -269,7 +269,7 @@ function App() {
             Status: {connectionStatus}
           </div>
         </div>
-        
+
         <h1>Speak a Word</h1>
         <p>Press and hold the button, speak clearly, then release</p>
 
@@ -283,7 +283,7 @@ function App() {
         >
           {listening ? '🎤🔴' : '🎤'}
         </button>
-        
+
         {listening ? (
           <div className="listening-status">
             <p>🎧 Listening... Speak now</p>
