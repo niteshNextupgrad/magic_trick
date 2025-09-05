@@ -19,7 +19,7 @@ const useWebSocket = (sessionId, role) => {
         const data = JSON.parse(event.data);
         if (data.type === 'transcript' && role === 'magician') {
           console.log("🎤 Final transcript received:", data.word);
-          setTranscripts(prev => [...prev, data.word]); // ✅ append phrase
+          setTranscripts(prev => [...prev, data.word]); //  append phrase
           if (navigator.vibrate) {
             navigator.vibrate(200);
           }
@@ -64,23 +64,30 @@ function App() {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorderRef.current = new MediaRecorder(stream);
+
+      //  Force opus encoding so Deepgram understands it
+      mediaRecorderRef.current = new MediaRecorder(stream, {
+        mimeType: "audio/webm;codecs=opus"
+      });
 
       mediaRecorderRef.current.ondataavailable = async (event) => {
         if (event.data.size > 0 && ws?.readyState === WebSocket.OPEN) {
           const arrayBuffer = await event.data.arrayBuffer();
           ws.send(arrayBuffer);
-          console.log("Sending audio chunk:", arrayBuffer.byteLength);
+
+          console.log("🎤 Sending audio chunk:", arrayBuffer.byteLength);
         }
       };
 
-      mediaRecorderRef.current.start(250); // chunk every 250ms
+      //  250ms chunks are good for live streaming
+      mediaRecorderRef.current.start(250);
       setIsRecording(true);
     } catch (error) {
       console.error(error);
       alert("Could not access the microphone. Please grant permission.");
     }
   };
+
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
