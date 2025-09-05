@@ -16,10 +16,10 @@ const useWebSocket = (sessionId, role) => {
         console.log('🔄 Attempting WebSocket connection...');
         // Use wss for production, ws for local development
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = process.env.NODE_ENV === 'production' 
-          ? "wss://magix-trix.onrender.com" 
+        const wsUrl = process.env.NODE_ENV === 'production'
+          ? "wss://magix-trix.onrender.com"
           : `${protocol}//${window.location.hostname}:3001`;
-        
+
         ws.current = new WebSocket(wsUrl);
 
         ws.current.onopen = () => {
@@ -34,36 +34,36 @@ const useWebSocket = (sessionId, role) => {
           try {
             const data = JSON.parse(event.data);
             console.log("📩 Received message:", data);
-            
+
             if (data.type === 'transcript' && role === 'magician') {
               console.log("📜 Full transcript received:", data.word);
               setTranscript(data.word);
               if (navigator.vibrate) navigator.vibrate(200);
             }
-            
+
             // Log what spectator said in their console
             if (data.type === 'transcript_sent' && role === 'spectator') {
               console.log("🎯 You said:", data.word);
               console.log("✅ Your word was sent to the magician!");
             }
-            
+
             if (data.type === 'deepgram_ready') {
               console.log("✅ Deepgram is ready for speech recognition");
               setIsDeepgramReady(true);
               setDeepgramError('');
             }
-            
+
             if (data.type === 'error') {
               console.error("❌ Server error:", data.message);
               setIsDeepgramReady(false);
               setDeepgramError(data.message);
-              
+
               // If spectator, show error message
               if (role === 'spectator') {
                 console.error("❌ Speech recognition error:", data.message);
               }
             }
-            
+
             if (data.type === 'joined') {
               console.log("✅ Successfully joined session:", data.sessionId);
             }
@@ -87,9 +87,9 @@ const useWebSocket = (sessionId, role) => {
           setDeepgramError('WebSocket connection error');
         };
       };
-      
+
       connect();
-      
+
       return () => {
         clearInterval(reconnectInterval.current);
         if (ws.current) ws.current.close();
@@ -147,24 +147,24 @@ function App() {
       }
 
       try {
-        console.log("🎤 Requesting microphone access...");
-        const stream = await navigator.mediaDevices.getUserMedia({ 
+        console.log("Requesting microphone access...");
+        const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             channelCount: 1,
             sampleRate: 48000,
             sampleSize: 16,
             echoCancellation: true,
             noiseSuppression: true
-          } 
+          }
         });
-        console.log("✅ Microphone access granted");
+        console.log("Microphone access granted");
 
         // Create audio context to monitor audio levels (for debugging)
         const audioContext = new AudioContext();
         const source = audioContext.createMediaStreamSource(stream);
         const analyser = audioContext.createAnalyser();
         source.connect(analyser);
-        
+
         mediaRecorderRef.current = new MediaRecorder(stream, {
           mimeType: 'audio/webm;codecs=opus',
         });
@@ -173,18 +173,24 @@ function App() {
           if (event.data.size > 0 && ws.current && ws.current.readyState === WebSocket.OPEN) {
             const arrayBuffer = await event.data.arrayBuffer();
             console.log("Sending audio chunk:", arrayBuffer.byteLength, "bytes");
-            
+
             // For spectators, check if Deepgram is ready before sending
             if (role === 'spectator' && !isDeepgramReady) {
               console.warn("⚠️ Deepgram not ready, skipping audio chunk");
               return;
             }
-            
-            // Send audio data with error handling
+
+            // Test sending a valid JSON control message
             try {
-              ws.current.send(arrayBuffer);
+              const testMessage = JSON.stringify({
+                type: "test",
+                message: "NITESH VERMA",
+                timestamp: Date.now()
+              });
+              ws.current.send(testMessage);
+              console.log("✅ Sent test JSON message");
             } catch (error) {
-              console.error("❌ Error sending audio:", error);
+              console.error("❌ Error sending test message:", error);
             }
           }
         };
@@ -192,7 +198,7 @@ function App() {
         mediaRecorderRef.current.start(250);
         setIsRecording(true);
         console.log("⏺️ Recording started");
-        
+
         // Log for spectator
         if (role === 'spectator') {
           console.log("🎤 Recording started - speak now!");
@@ -214,7 +220,7 @@ function App() {
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
       console.log("⏹️ Recording stopped");
-      
+
       // Log for spectator
       if (role === 'spectator') {
         console.log("⏹️ Recording stopped - processing your speech...");
@@ -253,7 +259,7 @@ function App() {
             Status: {connectionStatus}
           </div>
         </div>
-        
+
         <h2>The Secret Word</h2>
         <div className="transcript-box">
           {transcript ? <h1>"{transcript}"</h1> : <p>Waiting for the spectator to speak a word...</p>}
@@ -272,7 +278,7 @@ function App() {
             alt="Spectator QR Code"
           />
         </div>
-        
+
         <div className="debug-info">
           <h3>Debug Information</h3>
           <p>Session ID: {sessionId}</p>
@@ -293,7 +299,7 @@ function App() {
             Status: {connectionStatus}
           </div>
         </div>
-        
+
         <h1>Speak a Word</h1>
         <p>Press and hold the button, say any word, then release.</p>
         <p className="instruction">Check your browser console to see what you said!</p>
@@ -310,9 +316,9 @@ function App() {
         >
           {isRecording ? '🎤🔴' : '🎤'}
         </button>
-        
+
         {isRecording && <p className="recording-status">Recording... Speak now</p>}
-        
+
         {!isDeepgramReady && (
           <div className="warning">
             <p>⚠️ Speech recognition is {deepgramError ? 'experiencing issues' : 'initializing'}. Please wait...</p>
@@ -326,8 +332,8 @@ function App() {
             )}
           </div>
         )}
-        
-        
+
+
         <div className="debug-info">
           <h3>Debug Information</h3>
           <p>Session ID: {sessionId}</p>
