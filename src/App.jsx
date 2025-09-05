@@ -6,6 +6,7 @@ const useWebSocket = (sessionId, role) => {
   const ws = useRef(null);
   const [transcript, setTranscript] = useState('');
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const [isDeepgramReady, setIsDeepgramReady] = useState(false);
   const reconnectInterval = useRef(null);
 
   useEffect(() => {
@@ -38,20 +39,24 @@ const useWebSocket = (sessionId, role) => {
               if (navigator.vibrate) navigator.vibrate(200);
             }
             
+            // Log what spectator said in their console
             if (data.type === 'transcript_sent' && role === 'spectator') {
-              console.log("✅ Transcript sent to magician:", data.word);
-            }
-            
-            if (data.type === 'error') {
-              console.error("❌ Server error:", data.message);
-            }
-            
-            if (data.type === 'joined') {
-              console.log("✅ Successfully joined session:", data.sessionId);
+              console.log("🎯 You said:", data.word);
+              console.log("✅ Your word was sent to the magician!");
             }
             
             if (data.type === 'deepgram_ready') {
               console.log("✅ Deepgram is ready for speech recognition");
+              setIsDeepgramReady(true);
+            }
+            
+            if (data.type === 'error') {
+              console.error("❌ Server error:", data.message);
+              setIsDeepgramReady(false);
+            }
+            
+            if (data.type === 'joined') {
+              console.log("✅ Successfully joined session:", data.sessionId);
             }
           } catch (error) {
             console.error("❌ Error parsing message:", error, event.data);
@@ -61,6 +66,7 @@ const useWebSocket = (sessionId, role) => {
         ws.current.onclose = () => {
           console.log('❌ WebSocket Disconnected');
           setConnectionStatus('disconnected');
+          setIsDeepgramReady(false);
           // Attempt to reconnect every 3 seconds
           reconnectInterval.current = setInterval(connect, 3000);
         };
@@ -68,6 +74,7 @@ const useWebSocket = (sessionId, role) => {
         ws.current.onerror = (error) => {
           console.error('❌ WebSocket error:', error);
           setConnectionStatus('error');
+          setIsDeepgramReady(false);
         };
       };
       
@@ -80,7 +87,7 @@ const useWebSocket = (sessionId, role) => {
     }
   }, [sessionId, role]);
 
-  return { ws, transcript, connectionStatus };
+  return { ws, transcript, connectionStatus, isDeepgramReady };
 };
 
 // Main App Component
@@ -88,6 +95,7 @@ function App() {
   const [role, setRole] = useState(null);
   const [sessionId, setSessionId] = useState('');
   const [isRecording, setIsRecording] = useState(false);
+  const [spokenWords, setSpokenWords] = useState([]);
   const mediaRecorderRef = useRef(null);
 
   // Parse URL for role/session
@@ -101,7 +109,7 @@ function App() {
     }
   }, []);
 
-  const { ws, transcript, connectionStatus } = useWebSocket(sessionId, role);
+  const { ws, transcript, connectionStatus, isDeepgramReady } = useWebSocket(sessionId, role);
 
   // Create a new session as magician
   const createSession = () => {
@@ -122,6 +130,13 @@ function App() {
   // Start recording
   const startRecording = async () => {
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+      // Check if Deepgram is ready (for spectators)
+      if (role === 'spectator' && !isDeepgramReady) {
+        console.warn("⚠️ Deepgram not ready yet, waiting...");
+        alert("Speech recognition is still initializing. Please wait a moment and try again.");
+        return;
+      }
+
       try {
         console.log("🎤 Requesting microphone access...");
         const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -141,6 +156,13 @@ function App() {
           if (event.data.size > 0 && ws.current && ws.current.readyState === WebSocket.OPEN) {
             const arrayBuffer = await event.data.arrayBuffer();
             console.log("📤 Sending audio chunk:", arrayBuffer.byteLength, "bytes");
+            
+            // For spectators, check if Deepgram is ready before sending
+            if (role === 'spectator' && !isDeepgramReady) {
+              console.warn("⚠️ Deepgram not ready, skipping audio chunk");
+              return;
+            }
+            
             ws.current.send(arrayBuffer);
           }
         };
@@ -148,6 +170,11 @@ function App() {
         mediaRecorderRef.current.start(250);
         setIsRecording(true);
         console.log("⏺️ Recording started");
+        
+        // Log for spectator
+        if (role === 'spectator') {
+          console.log("🎤 Recording started - speak now!");
+        }
       } catch (error) {
         console.error("❌ Mic error:", error);
         alert("Could not access the microphone. Please allow microphone permissions.");
@@ -164,6 +191,11 @@ function App() {
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
       console.log("⏹️ Recording stopped");
+      
+      // Log for spectator
+      if (role === 'spectator') {
+        console.log("⏹️ Recording stopped - processing your speech...");
+      }
     }
     setIsRecording(false);
   };
@@ -229,30 +261,45 @@ function App() {
           <div className={`connection-status ${connectionStatus}`}>
             Status: {connectionStatus}
           </div>
+          {!isDeepgramReady && (
+            <div className="deepgram-status">
+              <p>Initializing speech recognition... {isDeepgramReady ? '✅ Ready' : '⏳ Please wait'}</p>
+            </div>
+          )}
         </div>
         
         <h1>Speak a Word</h1>
         <p>Press and hold the button, say any word, then release.</p>
+        <p className="instruction">Check your browser console to see what you said!</p>
 
         <button
-          className={`record-button ${isRecording ? 'recording' : ''}`}
+          className={`record-button ${isRecording ? 'recording' : ''} ${!isDeepgramReady ? 'disabled' : ''}`}
           onMouseDown={startRecording}
           onTouchStart={startRecording}
           onMouseUp={stopRecording}
           onTouchEnd={stopRecording}
           aria-label="Hold to record your word"
           aria-pressed={isRecording}
+          disabled={!isDeepgramReady}
         >
           {isRecording ? '🎤🔴' : '🎤'}
         </button>
         
         {isRecording && <p className="recording-status">Recording... Speak now</p>}
         
+        {!isDeepgramReady && (
+          <div className="warning">
+            <p>⚠️ Speech recognition is initializing. Please wait before speaking.</p>
+          </div>
+        )}
+    
+        
         <div className="debug-info">
           <h3>Debug Information</h3>
           <p>Session ID: {sessionId}</p>
           <p>Role: {role}</p>
           <p>Connection: {connectionStatus}</p>
+          <p>Deepgram: {isDeepgramReady ? '✅ Ready' : '❌ Not Ready'}</p>
           <p>Recording: {isRecording ? "Yes" : "No"}</p>
         </div>
       </div>
