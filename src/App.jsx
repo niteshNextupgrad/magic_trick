@@ -149,8 +149,18 @@ function App() {
   };
 
   // Start listening
-  const startListening = () => {
-    SpeechRecognition.startListening({ continuous: true });
+  const startListening = async () => {
+    try {
+      // First request microphone permission
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('✅ Microphone permission granted');
+
+      // Then start speech recognition
+      SpeechRecognition.startListening({ continuous: true });
+    } catch (error) {
+      console.error('❌ Microphone access denied:', error);
+      alert('Please allow microphone permissions to use speech recognition');
+    }
   };
 
   // Stop listening
