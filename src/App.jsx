@@ -8,10 +8,10 @@ const useWebSocket = (sessionId, role) => {
 
   useEffect(() => {
     if (sessionId && role) {
-      ws.current = new WebSocket("wss://magix-trix.onrender.com");
+      ws.current = new WebSocket("wss://your-backend-server.com"); // <- Replace with your backend
 
       ws.current.onopen = () => {
-        console.log('WebSocket Connected');
+        console.log('✅ WebSocket Connected');
         ws.current.send(JSON.stringify({ type: 'join', sessionId, role }));
       };
 
@@ -19,14 +19,13 @@ const useWebSocket = (sessionId, role) => {
         const data = JSON.parse(event.data);
         if (data.type === 'transcript' && role === 'magician') {
           console.log("🎤 Final transcript received:", data.word);
-          setTranscripts(prev => [...prev, data.word]); //  append phrase
-          if (navigator.vibrate) {
-            navigator.vibrate(200);
-          }
+          setTranscripts(prev => [...prev, data.word]); // Append phrase
+          if (navigator.vibrate) navigator.vibrate(200);
         }
       };
 
-      ws.current.onclose = () => console.log('WebSocket Disconnected');
+      ws.current.onclose = () => console.log('❌ WebSocket Disconnected');
+
       return () => ws.current.close();
     }
   }, [sessionId, role]);
@@ -64,30 +63,23 @@ function App() {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      //  Force opus encoding so Deepgram understands it
-      mediaRecorderRef.current = new MediaRecorder(stream, {
-        mimeType: "audio/webm;codecs=opus"
-      });
+      mediaRecorderRef.current = new MediaRecorder(stream);
 
       mediaRecorderRef.current.ondataavailable = async (event) => {
         if (event.data.size > 0 && ws?.readyState === WebSocket.OPEN) {
           const arrayBuffer = await event.data.arrayBuffer();
-          ws.send(arrayBuffer);
-
+          ws.send(arrayBuffer); // send raw audio to backend
           console.log("🎤 Sending audio chunk:", arrayBuffer.byteLength);
         }
       };
 
-      //  250ms chunks are good for live streaming
-      mediaRecorderRef.current.start(250);
+      mediaRecorderRef.current.start(250); // 250ms chunks
       setIsRecording(true);
     } catch (error) {
       console.error(error);
       alert("Could not access the microphone. Please grant permission.");
     }
   };
-
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
