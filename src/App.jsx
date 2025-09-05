@@ -7,6 +7,7 @@ const useWebSocket = (sessionId, role) => {
   const [transcript, setTranscript] = useState('');
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [isDeepgramReady, setIsDeepgramReady] = useState(false);
+  const [deepgramError, setDeepgramError] = useState('');
   const reconnectInterval = useRef(null);
 
   useEffect(() => {
@@ -24,6 +25,7 @@ const useWebSocket = (sessionId, role) => {
         ws.current.onopen = () => {
           console.log('✅ WebSocket Connected');
           setConnectionStatus('connected');
+          setDeepgramError('');
           clearInterval(reconnectInterval.current);
           ws.current.send(JSON.stringify({ type: 'join', sessionId, role }));
         };
@@ -48,11 +50,18 @@ const useWebSocket = (sessionId, role) => {
             if (data.type === 'deepgram_ready') {
               console.log("✅ Deepgram is ready for speech recognition");
               setIsDeepgramReady(true);
+              setDeepgramError('');
             }
             
             if (data.type === 'error') {
               console.error("❌ Server error:", data.message);
               setIsDeepgramReady(false);
+              setDeepgramError(data.message);
+              
+              // If spectator, show error message
+              if (role === 'spectator') {
+                console.error("❌ Speech recognition error:", data.message);
+              }
             }
             
             if (data.type === 'joined') {
@@ -75,6 +84,7 @@ const useWebSocket = (sessionId, role) => {
           console.error('❌ WebSocket error:', error);
           setConnectionStatus('error');
           setIsDeepgramReady(false);
+          setDeepgramError('WebSocket connection error');
         };
       };
       
@@ -87,7 +97,7 @@ const useWebSocket = (sessionId, role) => {
     }
   }, [sessionId, role]);
 
-  return { ws, transcript, connectionStatus, isDeepgramReady };
+  return { ws, transcript, connectionStatus, isDeepgramReady, deepgramError };
 };
 
 // Main App Component
@@ -95,7 +105,6 @@ function App() {
   const [role, setRole] = useState(null);
   const [sessionId, setSessionId] = useState('');
   const [isRecording, setIsRecording] = useState(false);
-  const [spokenWords, setSpokenWords] = useState([]);
   const mediaRecorderRef = useRef(null);
 
   // Parse URL for role/session
@@ -109,7 +118,7 @@ function App() {
     }
   }, []);
 
-  const { ws, transcript, connectionStatus, isDeepgramReady } = useWebSocket(sessionId, role);
+  const { ws, transcript, connectionStatus, isDeepgramReady, deepgramError } = useWebSocket(sessionId, role);
 
   // Create a new session as magician
   const createSession = () => {
@@ -143,11 +152,19 @@ function App() {
           audio: {
             channelCount: 1,
             sampleRate: 48000,
-            sampleSize: 16
+            sampleSize: 16,
+            echoCancellation: true,
+            noiseSuppression: true
           } 
         });
         console.log("✅ Microphone access granted");
 
+        // Create audio context to monitor audio levels (for debugging)
+        const audioContext = new AudioContext();
+        const source = audioContext.createMediaStreamSource(stream);
+        const analyser = audioContext.createAnalyser();
+        source.connect(analyser);
+        
         mediaRecorderRef.current = new MediaRecorder(stream, {
           mimeType: 'audio/webm;codecs=opus',
         });
@@ -155,7 +172,7 @@ function App() {
         mediaRecorderRef.current.ondataavailable = async (event) => {
           if (event.data.size > 0 && ws.current && ws.current.readyState === WebSocket.OPEN) {
             const arrayBuffer = await event.data.arrayBuffer();
-            console.log("📤 Sending audio chunk:", arrayBuffer.byteLength, "bytes");
+            console.log("Sending audio chunk:", arrayBuffer.byteLength, "bytes");
             
             // For spectators, check if Deepgram is ready before sending
             if (role === 'spectator' && !isDeepgramReady) {
@@ -163,7 +180,12 @@ function App() {
               return;
             }
             
-            ws.current.send(arrayBuffer);
+            // Send audio data with error handling
+            try {
+              ws.current.send(arrayBuffer);
+            } catch (error) {
+              console.error("❌ Error sending audio:", error);
+            }
           }
         };
 
@@ -174,6 +196,7 @@ function App() {
         // Log for spectator
         if (role === 'spectator') {
           console.log("🎤 Recording started - speak now!");
+          console.log("🔊 Speak clearly into your microphone");
         }
       } catch (error) {
         console.error("❌ Mic error:", error);
@@ -198,6 +221,14 @@ function App() {
       }
     }
     setIsRecording(false);
+  };
+
+  // Reconnect function for spectators
+  const reconnect = () => {
+    if (ws.current) {
+      ws.current.close();
+      console.log("🔄 Manual reconnect triggered");
+    }
   };
 
   // UI rendering
@@ -261,11 +292,6 @@ function App() {
           <div className={`connection-status ${connectionStatus}`}>
             Status: {connectionStatus}
           </div>
-          {!isDeepgramReady && (
-            <div className="deepgram-status">
-              <p>Initializing speech recognition... {isDeepgramReady ? '✅ Ready' : '⏳ Please wait'}</p>
-            </div>
-          )}
         </div>
         
         <h1>Speak a Word</h1>
@@ -289,10 +315,18 @@ function App() {
         
         {!isDeepgramReady && (
           <div className="warning">
-            <p>⚠️ Speech recognition is initializing. Please wait before speaking.</p>
+            <p>⚠️ Speech recognition is {deepgramError ? 'experiencing issues' : 'initializing'}. Please wait...</p>
+            {deepgramError && (
+              <div>
+                <p>Error: {deepgramError}</p>
+                <button onClick={reconnect} className="reconnect-button">
+                  Try Reconnecting
+                </button>
+              </div>
+            )}
           </div>
         )}
-    
+        
         
         <div className="debug-info">
           <h3>Debug Information</h3>
@@ -300,6 +334,7 @@ function App() {
           <p>Role: {role}</p>
           <p>Connection: {connectionStatus}</p>
           <p>Deepgram: {isDeepgramReady ? '✅ Ready' : '❌ Not Ready'}</p>
+          {deepgramError && <p>Error: {deepgramError}</p>}
           <p>Recording: {isRecording ? "Yes" : "No"}</p>
         </div>
       </div>
