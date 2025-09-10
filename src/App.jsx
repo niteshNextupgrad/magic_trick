@@ -13,7 +13,7 @@ const useWebSocket = (sessionId, role) => {
     if (sessionId && role) {
       const connect = () => {
         console.log('🔄 Attempting WebSocket connection...');
-        const wsUrl = "wss://magix-trix.onrender.com"
+        const wsUrl = "ws://localhost:3001"
 
         ws.current = new WebSocket(wsUrl);
 
@@ -37,6 +37,14 @@ const useWebSocket = (sessionId, role) => {
 
             if (data.type === 'joined') {
               console.log("Successfully joined session:", data.sessionId);
+            }
+
+            // Handle summary response
+            if (data.type === 'summary' && role === 'spectator') {
+              console.log("Summary received:", data.summary);
+              // Open new tab with the summary
+              const newTab = window.open(`https://www.google.com/search?q=${transcript}`, '_blank');
+              navigator.vibrate([500, 100, 500]);
             }
           } catch (error) {
             console.error("Error parsing message:", error, event.data);
@@ -72,6 +80,8 @@ function App() {
   const [role, setRole] = useState(null);
   const [sessionId, setSessionId] = useState('');
   const [transcript, setTranscript] = useState('');
+  const [fullSpeech, setFullSpeech] = useState(''); // Store all speech for summarization
+  const [lastTranscript, setLastTranscript] = useState(''); // Track the last transcript to avoid duplicates
   const silenceTimerRef = useRef(null);
 
   // Speech recognition hook
@@ -187,14 +197,10 @@ function App() {
   // Start listening
   const startListening = async () => {
     try {
-      // First request microphone permission
-      // await navigator.mediaDevices.getUserMedia({ audio: true });
-      console.log('✅ Microphone permission granted');
-
-      // Then start speech recognition (NOT continuous)
-      SpeechRecognition.startListening(); // Remove { continuous: true }
+      console.log('Microphone permission granted');
+      SpeechRecognition.startListening({ continuous: true });
     } catch (error) {
-      console.error('❌ Microphone access denied:', error);
+      console.error('Microphone access denied:', error);
       alert('Please allow microphone permissions to use speech recognition');
     }
   };
@@ -202,6 +208,18 @@ function App() {
   // Stop listening
   const stopListening = () => {
     SpeechRecognition.stopListening();
+
+    // Send full speech for summarization
+    if (role === 'spectator' && fullSpeech && ws.current && ws.current.readyState === WebSocket.OPEN) {
+      const message = JSON.stringify({
+        type: 'summarize',
+        text: fullSpeech,
+        timestamp: Date.now()
+      });
+      ws.current.send(message);
+      console.log('Sent speech for summarization. Text length:', fullSpeech.length);
+    }
+
     resetTranscript();
 
     // Clear the silence timer
@@ -211,20 +229,19 @@ function App() {
     }
   };
 
-  // Send test message
-  const sendTestMessage = (message) => {
-    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-      const testMessage = JSON.stringify({
-        type: 'test',
-        message: message,
-        timestamp: Date.now()
-      });
-      ws.current.send(testMessage);
-      console.log('🧪 Sent test message:', message);
+  // Accumulate speech for summarization - FIXED VERSION
+  useEffect(() => {
+    if (speechTranscript && speechTranscript !== lastTranscript) {
+      // Only add new words, not the entire transcript each time
+      const newWords = speechTranscript.replace(lastTranscript, '').trim();
+      if (newWords) {
+        setFullSpeech(prev => prev ? prev + ' ' + newWords : newWords);
+        setLastTranscript(speechTranscript);
+        console.log('Added to full speech:', newWords);
+      }
     }
-  };
+  }, [speechTranscript, lastTranscript]);
 
-  // UI rendering
   if (!role) {
     return (
       <div className="container center">
@@ -288,9 +305,7 @@ function App() {
           </div>
         </div>
 
-        <h1>Speak a Word</h1>
-        <p>Click the button, speak clearly, then it will auto-stop after 10 seconds</p>
-
+        <h1>Speak any Word</h1>
         <div className="recording-controls">
           <button
             onClick={listening ? stopListening : startListening}
@@ -307,16 +322,6 @@ function App() {
             </div>
           </div>
         )}
-
-        <div className="test-buttons">
-          <h3>Test Messages</h3>
-          <button onClick={() => sendTestMessage("this is a normal test message!")} className="test-button">
-            Send Test Message
-          </button>
-          <button onClick={() => sendTestMessage("this is a normal MAGIC WORD test message")} className="test-button">
-            Send Magic Word
-          </button>
-        </div>
       </div>
     );
   }
