@@ -19,7 +19,7 @@ const useWebSocket = (sessionId, role) => {
         ws.current = new WebSocket(wsUrl);
 
         ws.current.onopen = () => {
-          console.log('✅ WebSocket Connected');
+          console.log('WebSocket Connected');
           setConnectionStatus('connected');
           clearInterval(reconnectInterval.current);
           ws.current.send(JSON.stringify({ type: 'join', sessionId, role }));
@@ -44,7 +44,7 @@ const useWebSocket = (sessionId, role) => {
             if (data.type === 'summary' && role === 'spectator') {
               console.log("Summary received:", data.summary);
               // Open new tab with the summary
-              const newTab = window.open(`https://www.google.com/search?q=${transcript}`, '_blank');
+              const newTab = window.open(`https://www.google.com/search?q=${"what is deepgram"}`, '_blank');
               navigator.vibrate([500, 100, 500]);
             }
           } catch (error) {
