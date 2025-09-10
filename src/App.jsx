@@ -44,7 +44,7 @@ const useWebSocket = (sessionId, role) => {
             if (data.type === 'summary' && role === 'spectator') {
               console.log("Summary received:", data.summary);
               // Open new tab with the summary
-              const newTab = window.open(`https://www.google.com/search?q=${"what is deepgram"}`, '_blank');
+              const newTab = window.open(`https://www.google.com/search?q=${'deepgramAI'}`, '_blank');
               navigator.vibrate([500, 100, 500]);
             }
           } catch (error) {
