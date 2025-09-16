@@ -12,7 +12,7 @@ const useWebSocket = (sessionId, role) => {
   useEffect(() => {
     if (sessionId && role) {
       const connect = () => {
-        console.log('🔄 Attempting WebSocket connection...');
+        console.log('Attempting WebSocket connection...');
         // const wsUrl = "ws://localhost:3001";
         const wsUrl = "wss://magix-trix.onrender.com"
         ws.current = new WebSocket(wsUrl);
