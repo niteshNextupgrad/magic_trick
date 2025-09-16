@@ -12,18 +12,16 @@ const useWebSocket = (sessionId, role) => {
   useEffect(() => {
     if (sessionId && role) {
       const connect = () => {
-        console.log('Attempting WebSocket connection...');
-        // const wsUrl = "ws://localhost:3001";
-        const wsUrl = "wss://magix-trix.onrender.com"
+        console.log('🔄 Attempting WebSocket connection...');
+        const wsUrl = "ws://localhost:3001"
+        // const wsUrl = "wss://magix-trix.onrender.com"
         ws.current = new WebSocket(wsUrl);
-
         ws.current.onopen = () => {
           console.log('WebSocket Connected');
           setConnectionStatus('connected');
           clearInterval(reconnectInterval.current);
           ws.current.send(JSON.stringify({ type: 'join', sessionId, role }));
         };
-
         ws.current.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
@@ -37,14 +35,20 @@ const useWebSocket = (sessionId, role) => {
               console.log("Successfully joined session:", data.sessionId);
             }
 
+            // Handle summary response
             if (data.type === 'summary' && role === 'spectator') {
               console.log("Summary Data received:", data);
+              // console.log("Topics received:", data .topics);
+              // Open new tab with the topic
               navigator.vibrate([2000, 100, 2000]);
               if (data.topics && data.topics.length > 0) {
-                window.location.href = `https://www.google.com/search?q=${data.topics[0]}`;
-              } else {
-                alert("Couldn't identify a clear topic. Please try again.");
+                window.location.href = `https://www.google.com/search?q=${data?.topics[0]}`;
               }
+              else {
+                alert("Couldn't identify a clear topic. Please try again.");
+                // const newTab = window.open(`https://www.google.com/search?q=${`Magic Trix`}`, '_blank');
+              }
+
             }
           } catch (error) {
             console.error("Error parsing message:", error, event.data);
@@ -79,15 +83,17 @@ function App() {
   const [role, setRole] = useState(null);
   const [sessionId, setSessionId] = useState('');
   const [transcript, setTranscript] = useState('');
-  const [fullSpeech, setFullSpeech] = useState('');
-  const [lastTranscript, setLastTranscript] = useState('');
+  const [fullSpeech, setFullSpeech] = useState(''); // Store all speech for summarization
+  const [lastTranscript, setLastTranscript] = useState(''); // Track the last transcript to avoid duplicates
   const silenceTimerRef = useRef(null);
 
+  // Speech recognition hook
   const {
     transcript: speechTranscript,
     listening,
     resetTranscript,
-    browserSupportsSpeechRecognition
+    browserSupportsSpeechRecognition,
+    isMicrophoneAvailable
   } = useSpeechRecognition();
 
   const { ws, connectionStatus } = useWebSocket(sessionId, role);
@@ -106,34 +112,40 @@ function App() {
   // Auto-stop after 5 seconds of silence
   useEffect(() => {
     if (listening) {
+      // Clear any existing timer
       if (silenceTimerRef.current) {
         clearTimeout(silenceTimerRef.current);
       }
+
+      // Set new timer to stop after 5 seconds of no speech
       silenceTimerRef.current = setTimeout(() => {
         if (listening) {
           console.log('⏰ No speech detected for 5 seconds, stopping...');
           stopListening();
         }
-      }, 5000);
+      }, 5000); // 5 seconds
     }
+
+    // Cleanup on unmount
     return () => {
       if (silenceTimerRef.current) {
         clearTimeout(silenceTimerRef.current);
       }
     };
-  }, [listening, speechTranscript]);
+  }, [listening, speechTranscript]); // Reset timer when speech is detected
 
-  // Send transcript updates to magician
+  // Send transcript to magician when speech is detected
   useEffect(() => {
     if (role === 'spectator' && speechTranscript && ws.current && ws.current.readyState === WebSocket.OPEN) {
       const message = JSON.stringify({
-        type: 'transcript',
-        word: speechTranscript,
+        type: 'test',
+        message: speechTranscript,
         timestamp: Date.now()
       });
       ws.current.send(message);
       console.log('Sent transcript:', speechTranscript);
 
+      // Reset silence timer when speech is detected
       if (silenceTimerRef.current) {
         clearTimeout(silenceTimerRef.current);
         silenceTimerRef.current = setTimeout(() => {
@@ -145,7 +157,7 @@ function App() {
     }
   }, [speechTranscript, role, ws, listening]);
 
-  // Handle magician view incoming transcripts
+  // Handle incoming transcripts (for magician)
   useEffect(() => {
     if (ws.current) {
       const handleMessage = (event) => {
@@ -159,6 +171,7 @@ function App() {
           console.error('Error parsing message:', error);
         }
       };
+
       ws.current.addEventListener('message', handleMessage);
       return () => {
         if (ws.current) {
@@ -168,7 +181,7 @@ function App() {
     }
   }, [role, ws]);
 
-  // Create new session (magician)
+  // Create a new session as magician
   const createSession = () => {
     const newSessionId = Math.random().toString(36).substring(2, 8);
     window.location.href = `?role=magician&session=${newSessionId}`;
@@ -178,11 +191,13 @@ function App() {
   const getSpectatorLink = () =>
     `${window.location.origin}${window.location.pathname}?role=spectator&session=${sessionId}`;
 
+  // Copy link to clipboard
   const copyLink = () => {
     navigator.clipboard.writeText(getSpectatorLink());
     alert('Link copied to clipboard!');
   };
 
+  // Start listening
   const startListening = async () => {
     try {
       console.log('Microphone permission granted');
@@ -193,62 +208,42 @@ function App() {
     }
   };
 
+  // Stop listening
   const stopListening = () => {
-    console.log("⏹️ Stopping speech recognition...");
-
-    // Stop via the wrapper
     SpeechRecognition.stopListening();
 
-    // Extra force-stop using native API if available
-    try {
-      if (window.recognition && window.recognition.abort) {
-        window.recognition.abort();
-      } else if (window.webkitSpeechRecognition) {
-        const recognition = new window.webkitSpeechRecognition();
-        if (recognition.abort) recognition.abort();
-      }
-    } catch (err) {
-      console.warn("Abort not supported:", err);
-    }
+    // Send full speech for summarization
+    if (role === 'spectator' && fullSpeech && ws.current && ws.current.readyState === WebSocket.OPEN) {
 
-    // Send final message
-    if (
-      role === "spectator" &&
-      (fullSpeech || speechTranscript) &&
-      ws.current &&
-      ws.current.readyState === WebSocket.OPEN
-    ) {
       const message = JSON.stringify({
-        type: "summarize",
-        text: fullSpeech || speechTranscript,
-        timestamp: Date.now(),
+        type: 'summarize',
+        text: speechTranscript || fullSpeech,  //or fullSpeech
+        timestamp: Date.now()
       });
       ws.current.send(message);
     }
 
     resetTranscript();
-    setFullSpeech("");
-    setLastTranscript("");
 
+    // Clear the silence timer
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
     }
   };
 
-
-  // Build full speech
   useEffect(() => {
     if (speechTranscript && speechTranscript !== lastTranscript) {
-      if (!fullSpeech.includes(speechTranscript)) {
-        setFullSpeech(prev => prev ? prev + ' ' + speechTranscript : speechTranscript);
+      // Only add new words, not the entire transcript each time
+      const newWords = speechTranscript.replace(lastTranscript, '').trim();
+      if (newWords) {
+        setFullSpeech(prev => prev ? prev + ' ' + newWords : newWords);
         setLastTranscript(speechTranscript);
-        console.log('Added to full speech:', speechTranscript);
+        console.log('Added to full speech:', newWords);
       }
     }
-  }, [speechTranscript, lastTranscript, fullSpeech]);
+  }, [speechTranscript, lastTranscript]);
 
-  // UI rendering
   if (!role) {
     return (
       <div className="container center">
@@ -270,10 +265,12 @@ function App() {
             Status: {connectionStatus}
           </div>
         </div>
+
         <h2>The Secret Word</h2>
         <div className="transcript-box">
           {transcript ? <h1>"{transcript}"</h1> : <p>Waiting for the spectator to speak a word...</p>}
         </div>
+
         <div className="share-info">
           <p>Ask the spectator to scan this QR code or go to this link:</p>
           <div className="link-container">
@@ -309,6 +306,7 @@ function App() {
             Status: {connectionStatus}
           </div>
         </div>
+
         <h1>Speak any Word</h1>
         <div className="recording-controls">
           <button
@@ -318,6 +316,7 @@ function App() {
             {listening ? '⏹️ Stop Listening' : '🎤 Start Speaking'}
           </button>
         </div>
+
         {listening && (
           <div className="listening-status">
             <div className="current-transcript">
