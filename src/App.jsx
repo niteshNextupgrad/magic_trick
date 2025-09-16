@@ -114,7 +114,7 @@ function App() {
       // Set new timer to stop after 5 seconds of no speech
       silenceTimerRef.current = setTimeout(() => {
         if (listening) {
-          // console.log('No speech detected for 5 seconds, stopping...');
+          console.log('No speech detected for 5 seconds, stopping...');
           stopListening();
         }
       }, 5000); // 5 seconds
