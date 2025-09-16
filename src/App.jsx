@@ -15,21 +15,16 @@ const useWebSocket = (sessionId, role) => {
         console.log('🔄 Attempting WebSocket connection...');
         // const wsUrl = "ws://localhost:3001"
         const wsUrl = "wss://magix-trix.onrender.com"
-
         ws.current = new WebSocket(wsUrl);
-
         ws.current.onopen = () => {
           console.log('WebSocket Connected');
           setConnectionStatus('connected');
           clearInterval(reconnectInterval.current);
           ws.current.send(JSON.stringify({ type: 'join', sessionId, role }));
         };
-
         ws.current.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-            console.log("📩 Received message:", data);
-
             if (data.type === 'transcript' && role === 'magician') {
               console.log("Full transcript received:", data.word);
               setTranscript(data.word);
@@ -42,11 +37,12 @@ const useWebSocket = (sessionId, role) => {
 
             // Handle summary response
             if (data.type === 'summary' && role === 'spectator') {
-              console.log("Summary received:", data.summary);
-              // Open new tab with the summary
-               navigator.vibrate([2000, 100, 2000]);
-              const newTab = window.open(`https://www.google.com/search?q=${'What is Deepgram'}`, '_blank');
-             
+              console.log("Summary Data received:", data);
+              // console.log("Topics received:", data .topics);
+              // Open new tab with the topic
+              navigator.vibrate([2000, 100, 2000]);
+              const newTab = window.open(`https://www.google.com/search?q=${data.topics[0] || "Deepgram"}`, '_blank');
+
             }
           } catch (error) {
             console.error("Error parsing message:", error, event.data);
@@ -77,7 +73,6 @@ const useWebSocket = (sessionId, role) => {
   return { ws, transcript, connectionStatus };
 };
 
-// Main App Component
 function App() {
   const [role, setRole] = useState(null);
   const [sessionId, setSessionId] = useState('');
@@ -119,7 +114,7 @@ function App() {
       // Set new timer to stop after 5 seconds of no speech
       silenceTimerRef.current = setTimeout(() => {
         if (listening) {
-          console.log('⏰ No speech detected for 5 seconds, stopping...');
+          // console.log('No speech detected for 5 seconds, stopping...');
           stopListening();
         }
       }, 5000); // 5 seconds
@@ -213,13 +208,13 @@ function App() {
 
     // Send full speech for summarization
     if (role === 'spectator' && fullSpeech && ws.current && ws.current.readyState === WebSocket.OPEN) {
+
       const message = JSON.stringify({
         type: 'summarize',
         text: fullSpeech,
         timestamp: Date.now()
       });
       ws.current.send(message);
-      console.log('Sent speech for summarization. Text length:', fullSpeech.length);
     }
 
     resetTranscript();
@@ -231,7 +226,6 @@ function App() {
     }
   };
 
-  // Accumulate speech for summarization - FIXED VERSION
   useEffect(() => {
     if (speechTranscript && speechTranscript !== lastTranscript) {
       // Only add new words, not the entire transcript each time
