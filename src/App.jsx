@@ -16,17 +16,21 @@ const useWebSocket = (sessionId, role) => {
         // const wsUrl = "ws://localhost:3001"
         const wsUrl = "wss://magix-trix.onrender.com"
         ws.current = new WebSocket(wsUrl);
+        
         ws.current.onopen = () => {
           console.log('WebSocket Connected');
           setConnectionStatus('connected');
           clearInterval(reconnectInterval.current);
           ws.current.send(JSON.stringify({ type: 'join', sessionId, role }));
         };
+
         ws.current.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-            if (data.type === 'transcript' && role === 'magician') {
-              console.log("Full transcript received:", data.word);
+            
+            // Spectator receives magician's speech transcript
+            if (data.type === 'transcript' && role === 'spectator') {
+              console.log("Transcript received from magician:", data.word);
               setTranscript(data.word);
               if (navigator.vibrate) navigator.vibrate(200);
             }
@@ -35,20 +39,18 @@ const useWebSocket = (sessionId, role) => {
               console.log("Successfully joined session:", data.sessionId);
             }
 
-            // Handle summary response
+            // Handle summary response - spectator gets redirected to Google search
             if (data.type === 'summary' && role === 'spectator') {
               console.log("Summary Data received:", data);
-              // console.log("Topics received:", data .topics);
-              // Open new tab with the topic
+              // Vibrate to indicate processing complete
               navigator.vibrate([2000, 100, 2000]);
+              
               if (data.topics && data.topics.length > 0) {
+                // Redirect spectator to Google search with the identified topic
                 window.location.href = `https://www.google.com/search?q=${data?.topics[0]}`;
-              }
-              else {
+              } else {
                 alert("Couldn't identify a clear topic. Please try again.");
-                // const newTab = window.open(`https://www.google.com/search?q=${`Magic Trix`}`, '_blank');
               }
-
             }
           } catch (error) {
             console.error("Error parsing message:", error, event.data);
@@ -86,9 +88,8 @@ function App() {
   const [fullSpeech, setFullSpeech] = useState(''); // Store all speech for summarization
   const [lastTranscript, setLastTranscript] = useState(''); // Track the last transcript to avoid duplicates
   const silenceTimerRef = useRef(null);
-  const [isProcessing, setIsProcessing] = useState(false);
 
-  // Speech recognition hook
+  // Speech recognition hook (only used by magician now)
   const {
     transcript: speechTranscript,
     listening,
@@ -97,7 +98,7 @@ function App() {
     isMicrophoneAvailable
   } = useSpeechRecognition();
 
-  const { ws, connectionStatus } = useWebSocket(sessionId, role);
+  const { ws, transcript: receivedTranscript, connectionStatus } = useWebSocket(sessionId, role);
 
   // Parse URL for role/session
   useEffect(() => {
@@ -110,9 +111,9 @@ function App() {
     }
   }, []);
 
-  // Auto-stop after 5 seconds of silence
+  // Auto-stop after 5 seconds of silence (magician only)
   useEffect(() => {
-    if (listening) {
+    if (role === 'magician' && listening) {
       // Clear any existing timer
       if (silenceTimerRef.current) {
         clearTimeout(silenceTimerRef.current);
@@ -133,18 +134,18 @@ function App() {
         clearTimeout(silenceTimerRef.current);
       }
     };
-  }, [listening, speechTranscript]); // Reset timer when speech is detected
+  }, [listening, speechTranscript, role]); // Reset timer when speech is detected
 
-  // Send transcript to magician when speech is detected
+  // Send magician's transcript to spectator when speech is detected
   useEffect(() => {
-    if (role === 'spectator' && speechTranscript && ws.current && ws.current.readyState === WebSocket.OPEN) {
+    if (role === 'magician' && speechTranscript && ws.current && ws.current.readyState === WebSocket.OPEN) {
       const message = JSON.stringify({
         type: 'test',
         message: speechTranscript,
         timestamp: Date.now()
       });
       ws.current.send(message);
-      console.log('Sent transcript:', speechTranscript);
+      console.log('Sent magician transcript:', speechTranscript);
 
       // Reset silence timer when speech is detected
       if (silenceTimerRef.current) {
@@ -158,29 +159,12 @@ function App() {
     }
   }, [speechTranscript, role, ws, listening]);
 
-  // Handle incoming transcripts (for magician)
+  // Update transcript state with received transcript (for spectator)
   useEffect(() => {
-    if (ws.current) {
-      const handleMessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'transcript' && role === 'magician') {
-            setTranscript(data.word);
-            console.log('📜 Received transcript:', data.word);
-          }
-        } catch (error) {
-          console.error('Error parsing message:', error);
-        }
-      };
-
-      ws.current.addEventListener('message', handleMessage);
-      return () => {
-        if (ws.current) {
-          ws.current.removeEventListener('message', handleMessage);
-        }
-      };
+    if (role === 'spectator' && receivedTranscript) {
+      setTranscript(receivedTranscript);
     }
-  }, [role, ws]);
+  }, [receivedTranscript, role]);
 
   // Create a new session as magician
   const createSession = () => {
@@ -198,19 +182,18 @@ function App() {
     alert('Link copied to clipboard!');
   };
 
-  // Start listening
+  // Start listening (magician only)
   const startListening = async () => {
     try {
-      setIsProcessing(true);
-      await SpeechRecognition.startListening({ continuous: true });
-      setIsProcessing(false);
+      console.log('Microphone permission granted');
+      SpeechRecognition.startListening({ continuous: true });
     } catch (error) {
       console.error('Microphone access denied:', error);
       alert('Please allow microphone permissions to use speech recognition');
     }
   };
 
-  // Stop listening
+  // Stop listening (magician only)
   const stopListening = () => {
     SpeechRecognition.stopListening();
 
@@ -227,16 +210,15 @@ function App() {
       console.warn("Could not force stop recognition:", err);
     }
 
-
-    // Send full speech for summarization
-    if (role === 'spectator' && fullSpeech && ws.current && ws.current.readyState === WebSocket.OPEN) {
-
+    // Send magician's full speech for summarization
+    if (role === 'magician' && ws.current && ws.current.readyState === WebSocket.OPEN) {
       const message = JSON.stringify({
         type: 'summarize',
-        text: speechTranscript || fullSpeech,  //or fullSpeech
+        text: speechTranscript || fullSpeech,
         timestamp: Date.now()
       });
       ws.current.send(message);
+      console.log('Sent speech for summarization:', speechTranscript || fullSpeech);
     }
 
     resetTranscript();
@@ -248,8 +230,9 @@ function App() {
     }
   };
 
+  // Track full speech for magician
   useEffect(() => {
-    if (speechTranscript && speechTranscript !== lastTranscript) {
+    if (role === 'magician' && speechTranscript && speechTranscript !== lastTranscript) {
       // Only add new words, not the entire transcript each time
       const newWords = speechTranscript.replace(lastTranscript, '').trim();
       if (newWords) {
@@ -258,7 +241,7 @@ function App() {
         console.log('Added to full speech:', newWords);
       }
     }
-  }, [speechTranscript, lastTranscript]);
+  }, [speechTranscript, lastTranscript, role]);
 
   if (!role) {
     return (
@@ -273,6 +256,15 @@ function App() {
   }
 
   if (role === 'magician') {
+    if (!browserSupportsSpeechRecognition) {
+      return (
+        <div className="container center">
+          <h1>Browser Not Supported</h1>
+          <p>Please use Chrome, Edge, or Safari for speech recognition.</p>
+        </div>
+      );
+    }
+
     return (
       <div className="container magician-view">
         <div className="header">
@@ -282,10 +274,25 @@ function App() {
           </div>
         </div>
 
-        <h2>The Secret Word</h2>
-        <div className="transcript-box">
-          {transcript ? <h1>"{transcript}"</h1> : <p>Waiting for the spectator to speak a word...</p>}
+        <h2>Speak to the Spectator</h2>
+        
+        <div className="recording-controls">
+          <button
+            onClick={listening ? stopListening : startListening}
+            className={`control-button ${listening ? 'stop-button' : 'start-button'}`}
+          >
+            {listening ? '⏹️ Stop Speaking' : '🎤 Start Speaking'}
+          </button>
         </div>
+
+        {listening && (
+          <div className="listening-status">
+            <h3>You're saying:</h3>
+            <div className="current-transcript">
+              {speechTranscript || "Waiting for speech..."}
+            </div>
+          </div>
+        )}
 
         <div className="share-info">
           <p>Ask the spectator to scan this QR code or go to this link:</p>
@@ -305,15 +312,6 @@ function App() {
   }
 
   if (role === 'spectator') {
-    if (!browserSupportsSpeechRecognition) {
-      return (
-        <div className="container center">
-          <h1>Browser Not Supported</h1>
-          <p>Please use Chrome, Edge, or Safari for speech recognition.</p>
-        </div>
-      );
-    }
-
     return (
       <div className="container center spectator-view">
         <div className="header">
@@ -323,31 +321,18 @@ function App() {
           </div>
         </div>
 
-        <h1>Speak any Word</h1>
-        <div className="recording-controls">
-          {/* <button
-            onClick={listening ? stopListening : startListening}
-            className={`control-button ${listening ? 'stop-button' : 'start-button'}`}
-          >
-            {listening ? '⏹️ Stop Listening' : '🎤 Start Speaking'}
-          </button> */}
-          <button
-            onClick={listening ? stopListening : startListening}
-            disabled={isProcessing}
-            className={`control-button ${listening ? 'stop-button' : 'start-button'} ${isProcessing ? 'processing' : ''}`}
-          >
-            {isProcessing ? 'Processing...' :
-              listening ? '⏹️ Stop Listening' : '🎤 Start Speaking'}
-          </button>
+        <h1>The Magician Says:</h1>
+        <div className="transcript-box">
+          {transcript ? (
+            <h2>"{transcript}"</h2>
+          ) : (
+            <p>Waiting for the magician to speak...</p>
+          )}
         </div>
 
-        {listening && (
-          <div className="listening-status">
-            <div className="current-transcript">
-              {speechTranscript || "Waiting for speech..."}
-            </div>
-          </div>
-        )}
+        <div className="instructions">
+          <p>Listen to what the magician says. The magic will happen automatically!</p>
+        </div>
       </div>
     );
   }
