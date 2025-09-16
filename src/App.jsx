@@ -36,7 +36,7 @@ const useWebSocket = (sessionId, role) => {
             }
 
             // Handle summary response
-            if (data.type === 'summary' && role === 'magician') {
+            if (data.type === 'summary' && role === 'spectator') {
               console.log("Summary Data received:", data);
               // console.log("Topics received:", data .topics);
               // Open new tab with the topic
