@@ -41,7 +41,13 @@ const useWebSocket = (sessionId, role) => {
               // console.log("Topics received:", data .topics);
               // Open new tab with the topic
               navigator.vibrate([2000, 100, 2000]);
-              const newTab = window.open(`https://www.google.com/search?q=${data.topics[0] || "Deepgram"}`, '_blank');
+              if (data.topics && data.topics.length > 0) {
+                window.location.href = `https://www.google.com/search?q=${data?.topics[0]}`;
+              }
+              else {
+                alert("Couldn't identify a clear topic. Please try again.");
+                // const newTab = window.open(`https://www.google.com/search?q=${`Magic Trix`}`, '_blank');
+              }
 
             }
           } catch (error) {
@@ -114,7 +120,7 @@ function App() {
       // Set new timer to stop after 5 seconds of no speech
       silenceTimerRef.current = setTimeout(() => {
         if (listening) {
-          console.log('No speech detected for 5 seconds, stopping...');
+          console.log('⏰ No speech detected for 5 seconds, stopping...');
           stopListening();
         }
       }, 5000); // 5 seconds
@@ -211,7 +217,7 @@ function App() {
 
       const message = JSON.stringify({
         type: 'summarize',
-        text: fullSpeech,
+        text: speechTranscript || fullSpeech,
         timestamp: Date.now()
       });
       ws.current.send(message);
