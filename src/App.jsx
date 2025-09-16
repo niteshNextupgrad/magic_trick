@@ -86,6 +86,7 @@ function App() {
   const [fullSpeech, setFullSpeech] = useState(''); // Store all speech for summarization
   const [lastTranscript, setLastTranscript] = useState(''); // Track the last transcript to avoid duplicates
   const silenceTimerRef = useRef(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Speech recognition hook
   const {
@@ -200,8 +201,9 @@ function App() {
   // Start listening
   const startListening = async () => {
     try {
-      console.log('Microphone permission granted');
-      SpeechRecognition.startListening({ continuous: true });
+      setIsProcessing(true);
+      await SpeechRecognition.startListening({ continuous: true });
+      setIsProcessing(false);
     } catch (error) {
       console.error('Microphone access denied:', error);
       alert('Please allow microphone permissions to use speech recognition');
@@ -211,6 +213,20 @@ function App() {
   // Stop listening
   const stopListening = () => {
     SpeechRecognition.stopListening();
+
+    // Force stop using the native API if available
+    try {
+      if (window.SpeechRecognition) {
+        const recognition = new window.SpeechRecognition();
+        recognition.stop();
+      } else if (window.webkitSpeechRecognition) {
+        const recognition = new window.webkitSpeechRecognition();
+        recognition.stop();
+      }
+    } catch (err) {
+      console.warn("Could not force stop recognition:", err);
+    }
+
 
     // Send full speech for summarization
     if (role === 'spectator' && fullSpeech && ws.current && ws.current.readyState === WebSocket.OPEN) {
@@ -309,11 +325,19 @@ function App() {
 
         <h1>Speak any Word</h1>
         <div className="recording-controls">
-          <button
+          {/* <button
             onClick={listening ? stopListening : startListening}
             className={`control-button ${listening ? 'stop-button' : 'start-button'}`}
           >
             {listening ? '⏹️ Stop Listening' : '🎤 Start Speaking'}
+          </button> */}
+          <button
+            onClick={listening ? stopListening : startListening}
+            disabled={isProcessing}
+            className={`control-button ${listening ? 'stop-button' : 'start-button'} ${isProcessing ? 'processing' : ''}`}
+          >
+            {isProcessing ? 'Processing...' :
+              listening ? '⏹️ Stop Listening' : '🎤 Start Speaking'}
           </button>
         </div>
 
