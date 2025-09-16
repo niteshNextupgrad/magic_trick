@@ -194,27 +194,48 @@ function App() {
   };
 
   const stopListening = () => {
-    SpeechRecognition.stopListening();
-    SpeechRecognition.abort(); //force stop
+    console.log("⏹️ Stopping speech recognition...");
 
-    if (role === 'spectator' && (fullSpeech || speechTranscript) && ws.current && ws.current.readyState === WebSocket.OPEN) {
+    // Stop via the wrapper
+    SpeechRecognition.stopListening();
+
+    // Extra force-stop using native API if available
+    try {
+      if (window.recognition && window.recognition.abort) {
+        window.recognition.abort();
+      } else if (window.webkitSpeechRecognition) {
+        const recognition = new window.webkitSpeechRecognition();
+        if (recognition.abort) recognition.abort();
+      }
+    } catch (err) {
+      console.warn("Abort not supported:", err);
+    }
+
+    // Send final message
+    if (
+      role === "spectator" &&
+      (fullSpeech || speechTranscript) &&
+      ws.current &&
+      ws.current.readyState === WebSocket.OPEN
+    ) {
       const message = JSON.stringify({
-        type: 'summarize',
+        type: "summarize",
         text: fullSpeech || speechTranscript,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
       ws.current.send(message);
     }
 
     resetTranscript();
-    setFullSpeech('');
-    setLastTranscript('');
+    setFullSpeech("");
+    setLastTranscript("");
 
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
     }
   };
+
 
   // Build full speech
   useEffect(() => {
