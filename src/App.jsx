@@ -16,40 +16,59 @@ const useWebSocket = (sessionId, role) => {
         // const wsUrl = "ws://localhost:3001"
         const wsUrl = "wss://magix-trix.onrender.com"
         ws.current = new WebSocket(wsUrl);
-        
+
         ws.current.onopen = () => {
           console.log('WebSocket Connected');
           setConnectionStatus('connected');
-          clearInterval(reconnectInterval.current);
+
+          // Clear reconnect loop if connected
+          if (reconnectInterval.current) {
+            clearInterval(reconnectInterval.current);
+            reconnectInterval.current = null;
+          }
+
           ws.current.send(JSON.stringify({ type: 'join', sessionId, role }));
         };
+
 
         ws.current.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-            
+
             // Spectator receives magician's speech transcript
             if (data.type === 'transcript' && role === 'spectator') {
               console.log("Transcript received from magician:", data.word);
               setTranscript(data.word);
-              if (navigator.vibrate) navigator.vibrate(200);
+              // if (navigator.vibrate) navigator.vibrate(200);
             }
 
             if (data.type === 'joined') {
               console.log("Successfully joined session:", data.sessionId);
             }
 
+            // Magician receives completion confirmation - can trigger vibration
+            if (data.type === 'summarize_complete' && role === 'magician') {
+              console.log("AI processing complete, topics:", data.topics);
+
+              // Vibrate magician's device when processing is complete
+              if (data.topics && data.topics.length > 0 && navigator.vibrate) {
+                navigator.vibrate([1000, 500, 1000]);
+              } else if (navigator.vibrate) {
+                navigator.vibrate([200, 200, 200]);
+              }
+            }
+
             // Handle summary response - spectator gets redirected to Google search
             if (data.type === 'summary' && role === 'spectator') {
               console.log("Summary Data received:", data);
               // Vibrate to indicate processing complete
-              navigator.vibrate([2000, 100, 2000]);
-              
+              // navigator.vibrate([1000, 1000, 2000]);
+
               if (data.topics && data.topics.length > 0) {
                 // Redirect spectator to Google search with the identified topic
                 window.location.href = `https://www.google.com/search?q=${data?.topics[0]}`;
               } else {
-                alert("Couldn't identify a clear topic. Please try again.");
+                console.log("Couldn't identify a clear topic. Please try again.");
               }
             }
           } catch (error) {
@@ -60,8 +79,16 @@ const useWebSocket = (sessionId, role) => {
         ws.current.onclose = () => {
           console.log('WebSocket Disconnected');
           setConnectionStatus('disconnected');
-          reconnectInterval.current = setInterval(connect, 3000);
+
+          // Prevent multiple reconnect loops
+          if (!reconnectInterval.current) {
+            reconnectInterval.current = setInterval(() => {
+              console.log("🔄 Attempting reconnect...");
+              connect();
+            }, 3000);
+          }
         };
+
 
         ws.current.onerror = (error) => {
           console.error('WebSocket error:', error);
@@ -89,7 +116,6 @@ function App() {
   const [lastTranscript, setLastTranscript] = useState(''); // Track the last transcript to avoid duplicates
   const silenceTimerRef = useRef(null);
 
-  // Speech recognition hook (only used by magician now)
   const {
     transcript: speechTranscript,
     listening,
@@ -275,7 +301,7 @@ function App() {
         </div>
 
         <h2>Speak to the Spectator</h2>
-        
+
         <div className="recording-controls">
           <button
             onClick={listening ? stopListening : startListening}
