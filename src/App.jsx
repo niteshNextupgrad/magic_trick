@@ -224,17 +224,17 @@ function App() {
     SpeechRecognition.stopListening();
 
     // Force stop using the native API if available
-    try {
-      if (window.SpeechRecognition) {
-        const recognition = new window.SpeechRecognition();
-        recognition.stop();
-      } else if (window.webkitSpeechRecognition) {
-        const recognition = new window.webkitSpeechRecognition();
-        recognition.stop();
-      }
-    } catch (err) {
-      console.warn("Could not force stop recognition:", err);
-    }
+    // try {
+    //   if (window.SpeechRecognition) {
+    //     const recognition = new window.SpeechRecognition();
+    //     recognition.stop();
+    //   } else if (window.webkitSpeechRecognition) {
+    //     const recognition = new window.webkitSpeechRecognition();
+    //     recognition.stop();
+    //   }
+    // } catch (err) {
+    //   console.warn("Could not force stop recognition:", err);
+    // }
 
     // Send magician's full speech for summarization
     if (role === 'magician' && ws.current && ws.current.readyState === WebSocket.OPEN) {
