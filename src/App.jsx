@@ -221,22 +221,10 @@ function App() {
 
   // Stop listening (magician only)
   const stopListening = () => {
+    console.log('Calling stopListening...');
     SpeechRecognition.stopListening();
 
-    // Force stop using the native API if available
-    // try {
-    //   if (window.SpeechRecognition) {
-    //     const recognition = new window.SpeechRecognition();
-    //     recognition.stop();
-    //   } else if (window.webkitSpeechRecognition) {
-    //     const recognition = new window.webkitSpeechRecognition();
-    //     recognition.stop();
-    //   }
-    // } catch (err) {
-    //   console.warn("Could not force stop recognition:", err);
-    // }
 
-    resetTranscript();
 
     // Send magician's full speech for summarization
     if (role === 'magician' && ws.current && ws.current.readyState === WebSocket.OPEN) {
@@ -249,7 +237,7 @@ function App() {
       console.log('Sent speech for summarization:', speechTranscript || fullSpeech);
     }
 
-
+    resetTranscript();
 
     // Clear the silence timer
     if (silenceTimerRef.current) {
