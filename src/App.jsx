@@ -236,6 +236,8 @@ function App() {
     //   console.warn("Could not force stop recognition:", err);
     // }
 
+    resetTranscript();
+
     // Send magician's full speech for summarization
     if (role === 'magician' && ws.current && ws.current.readyState === WebSocket.OPEN) {
       const message = JSON.stringify({
@@ -247,7 +249,7 @@ function App() {
       console.log('Sent speech for summarization:', speechTranscript || fullSpeech);
     }
 
-    resetTranscript();
+
 
     // Clear the silence timer
     if (silenceTimerRef.current) {
