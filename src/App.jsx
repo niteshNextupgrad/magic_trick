@@ -6,7 +6,6 @@ import './App.css';
 const useWebSocket = (sessionId, role) => {
   const ws = useRef(null);
   const [transcript, setTranscript] = useState('');
-
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const reconnectInterval = useRef(null);
 
@@ -116,7 +115,6 @@ function App() {
   const [fullSpeech, setFullSpeech] = useState(''); // Store all speech for summarization
   const [lastTranscript, setLastTranscript] = useState(''); // Track the last transcript to avoid duplicates
   const silenceTimerRef = useRef(null);
-  const [manuallyStopped, setManuallyStopped] = useState(false);
 
   const {
     transcript: speechTranscript,
@@ -139,37 +137,53 @@ function App() {
     }
   }, []);
 
-  // Send magician's transcript to spectator when speech is detected
+  // Auto-stop after 5 seconds of silence (magician only)
   useEffect(() => {
-    // Only set timer if listening and NOT manually stopped
-    if (role === 'magician' && listening && !manuallyStopped) {
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-
-      const lastSpeech = speechTranscript;
-      silenceTimerRef.current = setTimeout(() => {
-        // Only stop if still listening and NOT manually stopped
-        if (listening && speechTranscript === lastSpeech && !manuallyStopped) {
-          console.log("⏰ Auto-stop after 5s silence");
-          stopListening();
-        }
-      }, 5000);
-    } else {
-      // Always clear timer if not listening or manually stopped
+    if (role === 'magician' && listening) {
+      // Clear any existing timer
       if (silenceTimerRef.current) {
         clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = null;
       }
+
+      // Set new timer to stop after 5 seconds of no speech
+      silenceTimerRef.current = setTimeout(() => {
+        if (listening) {
+          console.log('⏰ No speech detected for 5 seconds, stopping...');
+          stopListening();
+        }
+      }, 5000); // 5 seconds
     }
 
     // Cleanup on unmount
     return () => {
       if (silenceTimerRef.current) {
         clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = null;
       }
     };
-  }, [speechTranscript, listening, role, manuallyStopped]);
+  }, [listening, speechTranscript, role]); // Reset timer when speech is detected
 
+  // Send magician's transcript to spectator when speech is detected
+  useEffect(() => {
+    if (role === 'magician' && speechTranscript && ws.current && ws.current.readyState === WebSocket.OPEN) {
+      const message = JSON.stringify({
+        type: 'test',
+        message: speechTranscript,
+        timestamp: Date.now()
+      });
+      ws.current.send(message);
+      console.log('Sent magician transcript:', speechTranscript);
+
+      // Reset silence timer when speech is detected
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = setTimeout(() => {
+          if (listening) {
+            stopListening();
+          }
+        }, 5000);
+      }
+    }
+  }, [speechTranscript, role, ws, listening]);
 
   // Update transcript state with received transcript (for spectator)
   useEffect(() => {
@@ -197,8 +211,7 @@ function App() {
   // Start listening (magician only)
   const startListening = async () => {
     try {
-      console.log('🎤 Start listening...');
-      setManuallyStopped(false); // reset stop flag
+      console.log('Microphone permission granted');
       SpeechRecognition.startListening({ continuous: true });
     } catch (error) {
       console.error('Microphone access denied:', error);
@@ -206,29 +219,29 @@ function App() {
     }
   };
 
-
   // Stop listening (magician only)
   const stopListening = () => {
-    console.log("Stop listening manually...");
-    setManuallyStopped(true); // user clicked stop
     SpeechRecognition.stopListening();
-    resetTranscript();
 
+    // Send magician's full speech for summarization
     if (role === 'magician' && ws.current && ws.current.readyState === WebSocket.OPEN) {
       const message = JSON.stringify({
         type: 'summarize',
-        text: fullSpeech || speechTranscript,
+        text: speechTranscript || fullSpeech,
         timestamp: Date.now()
       });
       ws.current.send(message);
+      console.log('Sent speech for summarization:', speechTranscript || fullSpeech);
     }
 
+    resetTranscript();
+
+    // Clear the silence timer
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
     }
   };
-
 
   // Track full speech for magician
   useEffect(() => {
