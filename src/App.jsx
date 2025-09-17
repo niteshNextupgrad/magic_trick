@@ -6,8 +6,6 @@ import './App.css';
 const useWebSocket = (sessionId, role) => {
   const ws = useRef(null);
   const [transcript, setTranscript] = useState('');
-  const [manuallyStopped, setManuallyStopped] = useState(false);
-
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const reconnectInterval = useRef(null);
 
@@ -15,8 +13,8 @@ const useWebSocket = (sessionId, role) => {
     if (sessionId && role) {
       const connect = () => {
         console.log('Attempting WebSocket connection...');
-        // const wsUrl = "ws://localhost:3001"
-        const wsUrl = "wss://magix-trix.onrender.com"
+        const wsUrl = "ws://localhost:3001"
+        // const wsUrl = "wss://magix-trix.onrender.com"
         ws.current = new WebSocket(wsUrl);
 
         ws.current.onopen = () => {
@@ -139,50 +137,29 @@ function App() {
     }
   }, []);
 
-  // Auto-stop after 5 seconds of silence (magician only)
-  useEffect(() => {
-    if (role === 'magician' && listening) {
-      // Clear any existing timer
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current);
-      }
-
-      // Set new timer to stop after 5 seconds of no speech
-      silenceTimerRef.current = setTimeout(() => {
-        if (listening) {
-          console.log('⏰ No speech detected for 5 seconds, stopping...');
-          stopListening();
-        }
-      }, 5000); // 5 seconds
-    }
-
-    // Cleanup on unmount
-    return () => {
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current);
-      }
-    };
-  }, [listening, speechTranscript, role]); // Reset timer when speech is detected
 
   // Send magician's transcript to spectator when speech is detected
   useEffect(() => {
-    if (role === 'magician' && listening && !manuallyStopped) {
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    if (role === 'magician' && speechTranscript && ws.current && ws.current.readyState === WebSocket.OPEN) {
+      const message = JSON.stringify({
+        type: 'test',
+        message: speechTranscript,
+        timestamp: Date.now()
+      });
+      ws.current.send(message);
+      console.log('Sent magician transcript:', speechTranscript);
 
-      const lastSpeech = speechTranscript;
-      silenceTimerRef.current = setTimeout(() => {
-        if (listening && speechTranscript === lastSpeech && !manuallyStopped) {
-          console.log("⏰ Auto-stop after 5s silence");
-          stopListening();
-        }
-      }, 5000);
+      // Reset silence timer when speech is detected
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = setTimeout(() => {
+          if (listening) {
+            stopListening();
+          }
+        }, 10000);
+      }
     }
-
-    return () => {
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-    };
-  }, [speechTranscript, listening, role, manuallyStopped]);
-
+  }, [speechTranscript, role, ws, listening]);
 
   // Update transcript state with received transcript (for spectator)
   useEffect(() => {
@@ -210,8 +187,7 @@ function App() {
   // Start listening (magician only)
   const startListening = async () => {
     try {
-      console.log('🎤 Start listening...');
-      setManuallyStopped(false); // reset stop flag
+      console.log('Microphone permission granted');
       SpeechRecognition.startListening({ continuous: true });
     } catch (error) {
       console.error('Microphone access denied:', error);
@@ -219,29 +195,42 @@ function App() {
     }
   };
 
-
   // Stop listening (magician only)
   const stopListening = () => {
-    console.log("⏹️ Stop listening manually...");
-    setManuallyStopped(true); // user clicked stop
     SpeechRecognition.stopListening();
-    resetTranscript();
 
+    // Force stop using the native API if available
+    // try {
+    //   if (window.SpeechRecognition) {
+    //     const recognition = new window.SpeechRecognition();
+    //     recognition.stop();
+    //   } else if (window.webkitSpeechRecognition) {
+    //     const recognition = new window.webkitSpeechRecognition();
+    //     recognition.stop();
+    //   }
+    // } catch (err) {
+    //   console.warn("Could not force stop recognition:", err);
+    // }
+
+    // Send magician's full speech for summarization
     if (role === 'magician' && ws.current && ws.current.readyState === WebSocket.OPEN) {
       const message = JSON.stringify({
         type: 'summarize',
-        text: fullSpeech || speechTranscript,
+        text: speechTranscript || fullSpeech,
         timestamp: Date.now()
       });
       ws.current.send(message);
+      console.log('Sent speech for summarization:', speechTranscript || fullSpeech);
     }
 
+    resetTranscript();
+
+    // Clear the silence timer
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
     }
   };
-
 
   // Track full speech for magician
   useEffect(() => {
