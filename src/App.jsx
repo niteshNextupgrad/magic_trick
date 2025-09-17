@@ -107,14 +107,12 @@ const useWebSocket = (sessionId, role) => {
 
   return { ws, transcript, connectionStatus };
 };
-
 function App() {
   const [role, setRole] = useState(null);
   const [sessionId, setSessionId] = useState('');
   const [transcript, setTranscript] = useState('');
-  const [fullSpeech, setFullSpeech] = useState(''); // Store all speech for summarization
-  const [lastTranscript, setLastTranscript] = useState(''); // Track the last transcript to avoid duplicates
-  const silenceTimerRef = useRef(null);
+  const [fullSpeech, setFullSpeech] = useState('');
+  const [lastTranscript, setLastTranscript] = useState('');
 
   const {
     transcript: speechTranscript,
@@ -137,31 +135,6 @@ function App() {
     }
   }, []);
 
-  // Auto-stop after 5 seconds of silence (magician only)
-  useEffect(() => {
-    if (role === 'magician' && listening) {
-      // Clear any existing timer
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current);
-      }
-
-      // Set new timer to stop after 5 seconds of no speech
-      silenceTimerRef.current = setTimeout(() => {
-        if (listening) {
-          console.log('⏰ No speech detected for 5 seconds, stopping...');
-          stopListening();
-        }
-      }, 5000); // 5 seconds
-    }
-
-    // Cleanup on unmount
-    return () => {
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current);
-      }
-    };
-  }, [listening, speechTranscript, role]); // Reset timer when speech is detected
-
   // Send magician's transcript to spectator when speech is detected
   useEffect(() => {
     if (role === 'magician' && speechTranscript && ws.current && ws.current.readyState === WebSocket.OPEN) {
@@ -172,16 +145,6 @@ function App() {
       });
       ws.current.send(message);
       console.log('Sent magician transcript:', speechTranscript);
-
-      // Reset silence timer when speech is detected
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = setTimeout(() => {
-          if (listening) {
-            stopListening();
-          }
-        }, 5000);
-      }
     }
   }, [speechTranscript, role, ws, listening]);
 
@@ -211,7 +174,6 @@ function App() {
   // Start listening (magician only)
   const startListening = async () => {
     try {
-      console.log('Microphone permission granted');
       SpeechRecognition.startListening({ continuous: true });
     } catch (error) {
       console.error('Microphone access denied:', error);
@@ -227,7 +189,7 @@ function App() {
     if (role === 'magician' && ws.current && ws.current.readyState === WebSocket.OPEN) {
       const message = JSON.stringify({
         type: 'summarize',
-        text: speechTranscript || fullSpeech,
+        text: fullSpeech,
         timestamp: Date.now()
       });
       ws.current.send(message);
@@ -235,18 +197,11 @@ function App() {
     }
 
     resetTranscript();
-
-    // Clear the silence timer
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = null;
-    }
   };
 
   // Track full speech for magician
   useEffect(() => {
     if (role === 'magician' && speechTranscript && speechTranscript !== lastTranscript) {
-      // Only add new words, not the entire transcript each time
       const newWords = speechTranscript.replace(lastTranscript, '').trim();
       if (newWords) {
         setFullSpeech(prev => prev ? prev + ' ' + newWords : newWords);
