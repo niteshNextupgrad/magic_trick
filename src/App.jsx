@@ -141,20 +141,32 @@ function App() {
 
   // Send magician's transcript to spectator when speech is detected
   useEffect(() => {
+    // Only set timer if listening and NOT manually stopped
     if (role === 'magician' && listening && !manuallyStopped) {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
 
       const lastSpeech = speechTranscript;
       silenceTimerRef.current = setTimeout(() => {
+        // Only stop if still listening and NOT manually stopped
         if (listening && speechTranscript === lastSpeech && !manuallyStopped) {
           console.log("⏰ Auto-stop after 5s silence");
           stopListening();
         }
       }, 5000);
+    } else {
+      // Always clear timer if not listening or manually stopped
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
     }
 
+    // Cleanup on unmount
     return () => {
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
     };
   }, [speechTranscript, listening, role, manuallyStopped]);
 
@@ -197,7 +209,7 @@ function App() {
 
   // Stop listening (magician only)
   const stopListening = () => {
-    console.log("⏹️ Stop listening manually...");
+    console.log("Stop listening manually...");
     setManuallyStopped(true); // user clicked stop
     SpeechRecognition.stopListening();
     resetTranscript();
