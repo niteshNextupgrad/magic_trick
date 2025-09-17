@@ -6,6 +6,8 @@ import './App.css';
 const useWebSocket = (sessionId, role) => {
   const ws = useRef(null);
   const [transcript, setTranscript] = useState('');
+  const [manuallyStopped, setManuallyStopped] = useState(false);
+
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const reconnectInterval = useRef(null);
 
