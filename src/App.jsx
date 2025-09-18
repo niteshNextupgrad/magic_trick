@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
-
+import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 
 // WebSocket connection hook
 const useWebSocket = (sessionId, role) => {
   const ws = useRef(null);
-  const [transcript, setTranscript] = useState('');
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const reconnectInterval = useRef(null);
 
@@ -30,16 +29,9 @@ const useWebSocket = (sessionId, role) => {
           ws.current.send(JSON.stringify({ type: 'join', sessionId, role }));
         };
 
-
         ws.current.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-
-            // Spectator receives magician's speech transcript
-            if (data.type === 'transcript' && role === 'spectator') {
-              console.log("Transcript received from magician:", data.word);
-              setTranscript(data.word);
-            }
 
             if (data.type === 'joined') {
               console.log("Successfully joined session:", data.sessionId);
@@ -53,7 +45,7 @@ const useWebSocket = (sessionId, role) => {
               if (data.topics && data.topics.length > 0 && navigator.vibrate) {
                 navigator.vibrate([1000, 200, 1000, 200, 1000]); //long vibrate to notify 
               } else if (navigator.vibrate) {
-                navigator.vibrate([200, 200, 200]); // short vibrate 
+                navigator.vibrate([100, 200, 100]); // short vibrate 
               }
             }
 
@@ -65,9 +57,6 @@ const useWebSocket = (sessionId, role) => {
               } else {
                 console.log("Couldn't identify a clear topic. Please try again.");
               }
-
-
-              setTranscript('');
             }
           } catch (error) {
             console.error("Error parsing message:", error, event.data);
@@ -87,7 +76,6 @@ const useWebSocket = (sessionId, role) => {
           }
         };
 
-
         ws.current.onerror = (error) => {
           console.error('WebSocket error:', error);
           setConnectionStatus('error');
@@ -103,7 +91,7 @@ const useWebSocket = (sessionId, role) => {
     }
   }, [sessionId, role]);
 
-  return { ws, transcript, connectionStatus };
+  return { ws, connectionStatus };
 };
 
 function App() {
@@ -113,80 +101,24 @@ function App() {
   const [fullSpeech, setFullSpeech] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [browserSupportsSpeech, setBrowserSupportsSpeech] = useState(true);
-
-  const recognitionRef = useRef(null);
-  const { ws, transcript: receivedTranscript, connectionStatus } = useWebSocket(sessionId, role);
-
-  // Initialize speech recognition
   const silenceTimerRef = useRef(null);
 
+  const { ws, connectionStatus } = useWebSocket(sessionId, role);
+
+  // Use react-speech-recognition hook
+  const {
+    transcript: speechTranscript,
+    listening,
+    resetTranscript,
+    browserSupportsSpeechRecognition
+  } = useSpeechRecognition();
+
+  // Update browser support state
   useEffect(() => {
-    if (role === "magician") {
-      try {
-        const SpeechRecognition =
-          window.SpeechRecognition || window.webkitSpeechRecognition;
-
-        if (!SpeechRecognition) {
-          alert("Browser does not support speech recognition!");
-          setBrowserSupportsSpeech(false);
-          return;
-        }
-
-        recognitionRef.current = new SpeechRecognition();
-        recognitionRef.current.continuous = true;
-        recognitionRef.current.interimResults = true;
-        recognitionRef.current.lang = "en-US";
-
-        // Handle results
-        recognitionRef.current.onresult = (event) => {
-          let currentTranscript = "";
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            if (event.results[i].isFinal) {
-              currentTranscript += event.results[i][0].transcript;
-            }
-          }
-
-          if (currentTranscript) {
-            // Reset silence timer on speech
-            resetSilenceTimer();
-
-            setFullSpeech((prev) => prev + " " + currentTranscript);
-
-            // Send live updates to spectator
-            if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-              ws.current.send(
-                JSON.stringify({
-                  type: "test",
-                  message: currentTranscript,
-                  timestamp: Date.now(),
-                })
-              );
-            }
-          }
-        };
-
-        recognitionRef.current.onerror = (event) => {
-          console.error("Speech recognition error:", event.error);
-          if (event.error === "not-allowed") {
-            alert("Microphone permission denied. Please allow microphone access.");
-            setIsListening(false);
-          }
-        };
-
-        recognitionRef.current.onend = () => {
-          // Auto-restart if magician hasn't manually stopped
-          if (isListening) {
-            console.log("Recognition ended, restarting...");
-            recognitionRef.current.start();
-          }
-        };
-      } catch (error) {
-        console.error("Error initializing speech recognition:", error);
-        setBrowserSupportsSpeech(false);
-      }
+    if (!browserSupportsSpeechRecognition) {
+      setBrowserSupportsSpeech(false);
     }
-  }, [role, ws, isListening]);
-
+  }, [browserSupportsSpeechRecognition]);
 
   // Parse URL for role/session
   useEffect(() => {
@@ -199,20 +131,68 @@ function App() {
     }
   }, []);
 
+  // Handle real-time speech transcription for magician
+  useEffect(() => {
+    if (role === 'magician' && speechTranscript) {
+      // Reset silence timer on speech
+      resetSilenceTimer();
+
+      // Send speech to spectator in real-time
+      if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+        ws.current.send(
+          JSON.stringify({
+            type: 'test',
+            message: speechTranscript,
+            timestamp: Date.now(),
+          })
+        );
+      }
+
+      // Update local transcript
+      setTranscript(speechTranscript);
+      setFullSpeech(speechTranscript); // Store the full speech for summarization
+    }
+  }, [speechTranscript, role, ws]);
+
+  // Handle spectator receiving transcript
+  useEffect(() => {
+    if (role === 'spectator' && ws.current) {
+      const handleMessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'transcript') {
+            setTranscript(data.word);
+          }
+        } catch (error) {
+          console.error("Error parsing message:", error);
+        }
+      };
+
+      ws.current.addEventListener('message', handleMessage);
+
+      return () => {
+        if (ws.current) {
+          ws.current.removeEventListener('message', handleMessage);
+        }
+      };
+    }
+  }, [role, ws]);
+
   const resetSilenceTimer = () => {
     clearTimeout(silenceTimerRef.current);
     silenceTimerRef.current = setTimeout(() => {
-      console.log("Silent for 10s → stopping...");
+      console.log("Silent for 10s stopping...");
       stopListening();
     }, 10000); // 10 seconds
   };
 
   const startListening = () => {
-    if (recognitionRef.current) {
+    if (role === 'magician') {
       try {
-        recognitionRef.current.start();
+        SpeechRecognition.startListening({ continuous: true });
         setIsListening(true);
-        setFullSpeech(""); // reset transcript
+        resetTranscript();
+        setFullSpeech(''); // Reset full speech
         resetSilenceTimer();
         console.log("Started listening...");
       } catch (error) {
@@ -222,20 +202,15 @@ function App() {
   };
 
   const stopListening = () => {
-    if (recognitionRef.current) {
+    if (role === 'magician') {
       try {
         clearTimeout(silenceTimerRef.current);
-        recognitionRef.current.stop();
+        SpeechRecognition.stopListening();
         setIsListening(false);
-        clearTimeout(silenceTimerRef.current);
         console.log("Stopped listening and sending transcript...");
 
-        if (
-          role === "magician" &&
-          ws.current &&
-          ws.current.readyState === WebSocket.OPEN &&
-          fullSpeech.trim()
-        ) {
+        // Send the full transcript for summarization
+        if (ws.current && ws.current.readyState === WebSocket.OPEN && fullSpeech.trim()) {
           ws.current.send(
             JSON.stringify({
               type: "summarize",
@@ -245,20 +220,18 @@ function App() {
           );
         }
 
-        setFullSpeech(""); // reset for next round
+        resetTranscript();
+        setTranscript('');
       } catch (error) {
         console.error("Error stopping recognition:", error);
       }
     }
   };
 
-
-  // Update transcript state with received transcript (for spectator)
+  // Update isListening state based on speech recognition
   useEffect(() => {
-    if (role === 'spectator' && receivedTranscript) {
-      setTranscript(receivedTranscript);
-    }
-  }, [receivedTranscript, role]);
+    setIsListening(listening);
+  }, [listening]);
 
   // Create a new session as magician
   const createSession = () => {
@@ -274,15 +247,6 @@ function App() {
     navigator.clipboard.writeText(getSpectatorLink());
     alert('Link copied to clipboard!');
   };
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-    };
-  }, []);
 
   if (!role) {
     return (
@@ -300,7 +264,7 @@ function App() {
     if (!browserSupportsSpeech) {
       return (
         <div className="container center">
-          <h1>Your Browser Not Supporting Speech Recognition</h1>
+          <h1>Your Browser Does Not Support Speech Recognition</h1>
         </div>
       );
     }
@@ -329,7 +293,7 @@ function App() {
           <div className="listening-status">
             <h3>You're saying:</h3>
             <div className="current-transcript">
-              {fullSpeech || "Waiting for speech..."}
+              {transcript || "Waiting for speech..."}
             </div>
           </div>
         )}
@@ -368,10 +332,6 @@ function App() {
           ) : (
             <p>Waiting for the magician to speak...</p>
           )}
-        </div>
-
-        <div className="instructions">
-          <p>Listen to what the magician says. The magic will happen automatically!</p>
         </div>
       </div>
     );
