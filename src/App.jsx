@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 import './App.css';
+
 
 // WebSocket connection hook
 const useWebSocket = (sessionId, role) => {
@@ -39,7 +39,6 @@ const useWebSocket = (sessionId, role) => {
             if (data.type === 'transcript' && role === 'spectator') {
               console.log("Transcript received from magician:", data.word);
               setTranscript(data.word);
-              // if (navigator.vibrate) navigator.vibrate(200);
             }
 
             if (data.type === 'joined') {
@@ -52,24 +51,23 @@ const useWebSocket = (sessionId, role) => {
 
               // Vibrate magician's device when processing is complete
               if (data.topics && data.topics.length > 0 && navigator.vibrate) {
-                navigator.vibrate([1000, 500, 1000]);
+                navigator.vibrate([1000, 200, 1000, 200, 1000]); //long vibrate to notify 
               } else if (navigator.vibrate) {
-                navigator.vibrate([200, 200, 200]);
+                navigator.vibrate([200, 200, 200]); // short vibrate 
               }
             }
 
             // Handle summary response - spectator gets redirected to Google search
             if (data.type === 'summary' && role === 'spectator') {
               console.log("Summary Data received:", data);
-              // Vibrate to indicate processing complete
-              // navigator.vibrate([1000, 1000, 2000]);
-
               if (data.topics && data.topics.length > 0) {
-                // Redirect spectator to Google search with the identified topic
                 window.location.href = `https://www.google.com/search?q=${data?.topics[0]}`;
               } else {
                 console.log("Couldn't identify a clear topic. Please try again.");
               }
+
+
+              setTranscript('');
             }
           } catch (error) {
             console.error("Error parsing message:", error, event.data);
@@ -107,23 +105,88 @@ const useWebSocket = (sessionId, role) => {
 
   return { ws, transcript, connectionStatus };
 };
+
 function App() {
   const [role, setRole] = useState(null);
   const [sessionId, setSessionId] = useState('');
   const [transcript, setTranscript] = useState('');
   const [fullSpeech, setFullSpeech] = useState('');
-  const [lastTranscript, setLastTranscript] = useState('');
-  const [isManuallyListening, setIsManuallyListening] = useState(false); // ONLY CHANGE: Added manual state tracking
+  const [isListening, setIsListening] = useState(false);
+  const [browserSupportsSpeech, setBrowserSupportsSpeech] = useState(true);
 
-  const {
-    transcript: speechTranscript,
-    listening,
-    resetTranscript,
-    browserSupportsSpeechRecognition,
-    isMicrophoneAvailable
-  } = useSpeechRecognition();
-
+  const recognitionRef = useRef(null);
   const { ws, transcript: receivedTranscript, connectionStatus } = useWebSocket(sessionId, role);
+
+  // Initialize speech recognition
+  const silenceTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (role === "magician") {
+      try {
+        const SpeechRecognition =
+          window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+          alert("Browser does not support speech recognition!");
+          setBrowserSupportsSpeech(false);
+          return;
+        }
+
+        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current.continuous = true;
+        recognitionRef.current.interimResults = true;
+        recognitionRef.current.lang = "en-US";
+
+        // Handle results
+        recognitionRef.current.onresult = (event) => {
+          let currentTranscript = "";
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            if (event.results[i].isFinal) {
+              currentTranscript += event.results[i][0].transcript;
+            }
+          }
+
+          if (currentTranscript) {
+            // Reset silence timer on speech
+            resetSilenceTimer();
+
+            setFullSpeech((prev) => prev + " " + currentTranscript);
+
+            // Send live updates to spectator
+            if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+              ws.current.send(
+                JSON.stringify({
+                  type: "test",
+                  message: currentTranscript,
+                  timestamp: Date.now(),
+                })
+              );
+            }
+          }
+        };
+
+        recognitionRef.current.onerror = (event) => {
+          console.error("Speech recognition error:", event.error);
+          if (event.error === "not-allowed") {
+            alert("Microphone permission denied. Please allow microphone access.");
+            setIsListening(false);
+          }
+        };
+
+        recognitionRef.current.onend = () => {
+          // Auto-restart if magician hasn't manually stopped
+          if (isListening) {
+            console.log("Recognition ended, restarting...");
+            recognitionRef.current.start();
+          }
+        };
+      } catch (error) {
+        console.error("Error initializing speech recognition:", error);
+        setBrowserSupportsSpeech(false);
+      }
+    }
+  }, [role, ws, isListening]);
+
 
   // Parse URL for role/session
   useEffect(() => {
@@ -136,18 +199,59 @@ function App() {
     }
   }, []);
 
-  // Send magician's transcript to spectator when speech is detected
-  useEffect(() => {
-    if (role === 'magician' && speechTranscript && ws.current && ws.current.readyState === WebSocket.OPEN) {
-      const message = JSON.stringify({
-        type: 'test',
-        message: speechTranscript,
-        timestamp: Date.now()
-      });
-      ws.current.send(message);
-      console.log('Sent magician transcript:', speechTranscript);
+  const resetSilenceTimer = () => {
+    clearTimeout(silenceTimerRef.current);
+    silenceTimerRef.current = setTimeout(() => {
+      console.log("Silent for 10s → stopping...");
+      stopListening();
+    }, 10000); // 10 seconds
+  };
+
+  const startListening = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.start();
+        setIsListening(true);
+        setFullSpeech(""); // reset transcript
+        resetSilenceTimer();
+        console.log("Started listening...");
+      } catch (error) {
+        console.error("Error starting recognition:", error);
+      }
     }
-  }, [speechTranscript, role, ws, listening]);
+  };
+
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      try {
+        clearTimeout(silenceTimerRef.current);
+        recognitionRef.current.stop();
+        setIsListening(false);
+        clearTimeout(silenceTimerRef.current);
+        console.log("Stopped listening and sending transcript...");
+
+        if (
+          role === "magician" &&
+          ws.current &&
+          ws.current.readyState === WebSocket.OPEN &&
+          fullSpeech.trim()
+        ) {
+          ws.current.send(
+            JSON.stringify({
+              type: "summarize",
+              text: fullSpeech,
+              timestamp: Date.now(),
+            })
+          );
+        }
+
+        setFullSpeech(""); // reset for next round
+      } catch (error) {
+        console.error("Error stopping recognition:", error);
+      }
+    }
+  };
+
 
   // Update transcript state with received transcript (for spectator)
   useEffect(() => {
@@ -163,8 +267,7 @@ function App() {
   };
 
   // Share link for spectator
-  const getSpectatorLink = () =>
-    `${window.location.origin}${window.location.pathname}?role=spectator&session=${sessionId}`;
+  const getSpectatorLink = () => `${window.location.origin}${window.location.pathname}?role=spectator&session=${sessionId}`;
 
   // Copy link to clipboard
   const copyLink = () => {
@@ -172,48 +275,14 @@ function App() {
     alert('Link copied to clipboard!');
   };
 
-  // ONLY CHANGE: Start listening with manual state
-  const startListening = async () => {
-    try {
-      setIsManuallyListening(true); // Set manual state first
-      SpeechRecognition.startListening({ continuous: true });
-    } catch (error) {
-      console.error('Microphone access denied:', error);
-      setIsManuallyListening(false); // Reset on error
-      alert('Please allow microphone permissions to use speech recognition');
-    }
-  };
-
-  // ONLY CHANGE: Stop listening with manual state
-  const stopListening = () => {
-    setIsManuallyListening(false); // Set manual state to false immediately
-    SpeechRecognition.stopListening();
-
-    // Send magician's full speech for summarization
-    if (role === 'magician' && ws.current && ws.current.readyState === WebSocket.OPEN) {
-      const message = JSON.stringify({
-        type: 'summarize',
-        text: fullSpeech,
-        timestamp: Date.now()
-      });
-      ws.current.send(message);
-      console.log('Sent speech for summarization:', speechTranscript || fullSpeech);
-    }
-
-    resetTranscript();
-  };
-
-  // Track full speech for magician
+  // Cleanup on unmount
   useEffect(() => {
-    if (role === 'magician' && speechTranscript && speechTranscript !== lastTranscript) {
-      const newWords = speechTranscript.replace(lastTranscript, '').trim();
-      if (newWords) {
-        setFullSpeech(prev => prev ? prev + ' ' + newWords : newWords);
-        setLastTranscript(speechTranscript);
-        console.log('Added to full speech:', newWords);
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
       }
-    }
-  }, [speechTranscript, lastTranscript, role]);
+    };
+  }, []);
 
   if (!role) {
     return (
@@ -228,11 +297,10 @@ function App() {
   }
 
   if (role === 'magician') {
-    if (!browserSupportsSpeechRecognition) {
+    if (!browserSupportsSpeech) {
       return (
         <div className="container center">
-          <h1>Browser Not Supported</h1>
-          <p>Please use Chrome, Edge, or Safari for speech recognition.</p>
+          <h1>Your Browser Not Supporting Speech Recognition</h1>
         </div>
       );
     }
@@ -250,18 +318,18 @@ function App() {
 
         <div className="recording-controls">
           <button
-            onClick={isManuallyListening ? stopListening : startListening}
-            className={`control-button ${isManuallyListening ? 'stop-button' : 'start-button'}`}
+            onClick={isListening ? stopListening : startListening}
+            className={`control-button ${isListening ? 'stop-button' : 'start-button'}`}
           >
-            {isManuallyListening ? '⏹️ Stop Speaking' : '🎤 Start Speaking'}
+            {isListening ? '⏹️ Stop Speaking' : '🎤 Start Speaking'}
           </button>
         </div>
 
-        {isManuallyListening && (
+        {isListening && (
           <div className="listening-status">
             <h3>You're saying:</h3>
             <div className="current-transcript">
-              {speechTranscript || "Waiting for speech..."}
+              {fullSpeech || "Waiting for speech..."}
             </div>
           </div>
         )}
