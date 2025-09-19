@@ -102,9 +102,16 @@ function App() {
   const [fullSpeech, setFullSpeech] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [browserSupportsSpeech, setBrowserSupportsSpeech] = useState(true);
-  const silenceTimerRef = useRef(null);
+  const [isMagicActive, setIsMagicActive] = useState(false);
+  const [magicSpeech, setMagicSpeech] = useState('');
 
   const { ws, connectionStatus } = useWebSocket(sessionId, role);
+
+  // const handleLogout = () => {
+  //   if (!confirm("Are you sure?")) return
+  //   window.sessionStorage.clear()
+  //   window.location.reload()
+  // }
 
   // Use react-speech-recognition hook
   const {
@@ -132,28 +139,65 @@ function App() {
     }
   }, []);
 
-  // Handle real-time speech transcription for magician
   useEffect(() => {
-    if (role === 'magician' && speechTranscript) {
-      // Reset silence timer on speech
-      resetSilenceTimer();
+    if (role !== 'magician' || !speechTranscript) return;
 
-      // Send speech to spectator in real-time
+    const lowerText = speechTranscript.toLowerCase();
+
+    // Start magic keyword
+    if (!isMagicActive && lowerText.includes("start magic")) {
+      console.log("Magic recording started!");
+      setIsMagicActive(true);
+      setMagicSpeech('');
+      resetTranscript(); // Reset to avoid including "start magic" itself
+      return;
+    }
+
+    // Stop magic keyword
+    if (isMagicActive && lowerText.includes("stop magic")) {
+      console.log("Magic recording stopped! Sending to backend...");
+      setIsMagicActive(false);
+
+      if (ws.current && ws.current.readyState === WebSocket.OPEN && magicSpeech.trim()) {
+        ws.current.send(JSON.stringify({
+          type: "summarize",
+          text: magicSpeech,
+          timestamp: Date.now()
+        }));
+      }
+      setMagicSpeech('');
+      resetTranscript();
+      return;
+    }
+
+    // If magic is active, accumulate speech and send to spectator
+    if (isMagicActive) {
+      const newSpeech = speechTranscript;
+      setMagicSpeech(prev => prev ? prev + ' ' + newSpeech : newSpeech);
+
+      // Send to spectator in real-time
       if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-        ws.current.send(
-          JSON.stringify({
-            type: 'test',
-            message: speechTranscript,
-            timestamp: Date.now(),
-          })
-        );
+        ws.current.send(JSON.stringify({
+          type: "test",
+          message: newSpeech,
+          timestamp: Date.now()
+        }));
       }
 
-      // Update local transcript
+      setTranscript(speechTranscript); // view for magician
+    } else {
+      // If not in magic mode, still send to spectator but don't accumulate for summarization
+      if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+        ws.current.send(JSON.stringify({
+          type: "test",
+          message: speechTranscript,
+          timestamp: Date.now()
+        }));
+      }
       setTranscript(speechTranscript);
-      setFullSpeech(speechTranscript); // Store the full speech for summarization
     }
-  }, [speechTranscript, role, ws]);
+
+  }, [speechTranscript]);
 
   // Handle spectator receiving transcript
   useEffect(() => {
@@ -179,13 +223,34 @@ function App() {
     }
   }, [role, ws]);
 
-  const resetSilenceTimer = () => {
-    clearTimeout(silenceTimerRef.current);
-    silenceTimerRef.current = setTimeout(() => {
-      console.log("Silent for 10s stopping...");
-      stopListening();
-    }, 10000); // 10 seconds
-  };
+  // Auto-start listening when both joined and stop when complete
+  useEffect(() => {
+    if (!ws.current) return;
+
+    const handleReady = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        // Start recording when both joined the session
+        if (data.type === "ready" && role === "magician") {
+          // alert("Spectator is connected — starting recording...");
+          startListening();
+        }
+        // Stop recording when summary received
+        if (data.type === "summarize_complete" && role === "magician") {
+          console.log("Summary complete — stopping recording");
+          stopListening();
+        }
+      } catch (err) {
+        console.error("Error in ready handler:", err);
+      }
+    };
+    ws.current.addEventListener("message", handleReady);
+
+    return () => {
+      ws.current.removeEventListener("message", handleReady);
+    };
+  }, [role, ws]);
 
   const startListening = () => {
     if (role === 'magician') {
@@ -193,8 +258,7 @@ function App() {
         SpeechRecognition.startListening({ continuous: true });
         setIsListening(true);
         resetTranscript();
-        setFullSpeech(''); // Reset full speech
-        resetSilenceTimer();
+        setFullSpeech('');
         console.log("Started listening...");
       } catch (error) {
         console.error("Error starting recognition:", error);
@@ -205,21 +269,9 @@ function App() {
   const stopListening = () => {
     if (role === 'magician') {
       try {
-        clearTimeout(silenceTimerRef.current);
         SpeechRecognition.stopListening();
         setIsListening(false);
-        console.log("Stopped listening and sending transcript...");
-
-        // Send the full transcript for summarization
-        if (ws.current && ws.current.readyState === WebSocket.OPEN && fullSpeech.trim()) {
-          ws.current.send(
-            JSON.stringify({
-              type: "summarize",
-              text: fullSpeech,
-              timestamp: Date.now(),
-            })
-          );
-        }
+        console.log("Stopped listening");
 
         resetTranscript();
         setTranscript('');
@@ -233,12 +285,6 @@ function App() {
   useEffect(() => {
     setIsListening(listening);
   }, [listening]);
-
-  // Create a new session as magician
-  const createSession = () => {
-    const newSessionId = Math.random().toString(36).substring(2, 8);
-    window.location.href = `?role=magician&session=${newSessionId}`;
-  };
 
   // Share link for spectator
   const getSpectatorLink = () => `${window.location.origin}${window.location.pathname}?role=spectator&session=${sessionId}`;
@@ -273,9 +319,16 @@ function App() {
           <div className={`connection-status ${connectionStatus}`}>
             Status: {connectionStatus}
           </div>
+          {/* <button onClick={handleLogout}>Logout</button> */}
         </div>
 
         <h2>Speak to the Spectator</h2>
+
+        {isMagicActive && (
+          <div className="magic-active-indicator">
+            <h3>Magic Mode Active - Speaking to AI</h3>
+          </div>
+        )}
 
         <div className="recording-controls">
           <button
