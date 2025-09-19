@@ -96,6 +96,7 @@ const useWebSocket = (sessionId, role) => {
 };
 
 function App() {
+  const [isCopied, setIsCopied] = useState(false)
   const [role, setRole] = useState(null);
   const [sessionId, setSessionId] = useState('');
   const [transcript, setTranscript] = useState('');
@@ -292,7 +293,7 @@ function App() {
   // Copy link to clipboard
   const copyLink = () => {
     navigator.clipboard.writeText(getSpectatorLink());
-    alert('Link copied to clipboard!');
+    setIsCopied(true)
   };
 
   if (!role) {
@@ -352,7 +353,7 @@ function App() {
           <p>Ask the spectator to scan this QR code or go to this link:</p>
           <div className="link-container">
             <input type="text" value={getSpectatorLink()} readOnly />
-            <button onClick={copyLink} className="copy-button">Copy</button>
+            <button onClick={copyLink} className="copy-button">{isCopied ? "Copied" :"Copy"}</button>
           </div>
           <img
             src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
