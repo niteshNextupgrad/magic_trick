@@ -323,7 +323,7 @@ function App() {
           {/* <button onClick={handleLogout}>Logout</button> */}
         </div>
 
-        <h2>Speak to the Spectator</h2>
+        {/* <h2>Speak to the Spectator</h2> */}
 
         {isMagicActive && (
           <div className="magic-active-indicator">
@@ -353,7 +353,7 @@ function App() {
           <p>Ask the spectator to scan this QR code or go to this link:</p>
           <div className="link-container">
             <input type="text" value={getSpectatorLink()} readOnly />
-            <button onClick={copyLink} className="copy-button">{isCopied ? "Copied" :"Copy"}</button>
+            <button onClick={copyLink} className="copy-button">{isCopied ? "Copied" : "Copy"}</button>
           </div>
           <img
             src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
@@ -376,14 +376,14 @@ function App() {
           </div>
         </div>
 
-        <h1>The Magician Says:</h1>
+        {/* <h1>The Magician Says:</h1>
         <div className="transcript-box">
           {transcript ? (
             <h2>"{transcript}"</h2>
           ) : (
             <p>Waiting for the magician to speak...</p>
           )}
-        </div>
+        </div> */}
       </div>
     );
   }
