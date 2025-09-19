@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
+import LoginPage from './Login';
 
 // WebSocket connection hook
 const useWebSocket = (sessionId, role) => {
@@ -249,18 +250,14 @@ function App() {
   };
 
   if (!role) {
-    return (
-      <div className="container center">
-        <h1>AI Magic Trick</h1>
-        <p>Create a session as the magician and share the link with spectators</p>
-        <button onClick={createSession} className="role-button">
-          Create Magic Session
-        </button>
-      </div>
-    );
+    return <LoginPage />
   }
 
   if (role === 'magician') {
+    const storedUser = JSON.parse(window.sessionStorage.getItem("user"))
+    if (!storedUser) {
+      return <LoginPage />
+    }
     if (!browserSupportsSpeech) {
       return (
         <div className="container center">
