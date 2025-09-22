@@ -203,6 +203,26 @@ img {
     margin: 2px;
 }
 
+.keyword_container{
+    margin: 10px 5px;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+}
+.keyword_container input{
+    width: 50%;
+    height: 40px;
+    padding-left: 8px;
+    border-radius: 8px;
+    outline: none;
+    border: 2px solid gray;
+    font-size: 16px;
+}
+.keyword_container input:focus{
+    cursor: pointer;
+    border: 2px solid green;
+}
+
 /* Responsive */
 @media (max-width: 600px) {
     .container {
@@ -217,4 +237,8 @@ img {
     .link-container input {
         width: 100%;
     }
+    .keyword_container input{
+       font-size: 14px;
+    }
+
 }

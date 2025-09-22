@@ -45,6 +45,9 @@ const useWebSocket = (sessionId, role) => {
               // Vibrate magician's device when processing is complete
               if (data.topics && data.topics.length > 0 && navigator.vibrate) {
                 navigator.vibrate([1000, 200, 1000, 200, 1000]); //long vibrate to notify 
+                setTimeout(() => {
+                  window.location.reload()
+                }, 5000)
               } else if (navigator.vibrate) {
                 navigator.vibrate([100, 200, 100]); // short vibrate 
               }
@@ -71,7 +74,7 @@ const useWebSocket = (sessionId, role) => {
           // Prevent multiple reconnect loops
           if (!reconnectInterval.current) {
             reconnectInterval.current = setInterval(() => {
-              console.log("🔄 Attempting reconnect...");
+              console.log("Attempting reconnect...");
               connect();
             }, 3000);
           }
@@ -105,6 +108,8 @@ function App() {
   const [isMagicActive, setIsMagicActive] = useState(false);
   const [magicSpeech, setMagicSpeech] = useState('');
   const [isCopied, setIsCopied] = useState(false)
+  const [startKeyword, setStartKeyword] = useState("start magic")
+  const [endKeyword, setEndKeyword] = useState("stop magic")
 
 
   // const silenceTimerRef = useRef(null);
@@ -143,17 +148,17 @@ function App() {
     let lowerText = speechTranscript.toLowerCase();
     let cleanText = speechTranscript;
 
-    // Start magic keyword
-    if (!isMagicActive && lowerText.includes("start magic")) {
+    // Start Magic behalf of the keyword...
+    if (!isMagicActive && lowerText.includes(startKeyword)) {
       console.log("Magic recording started!");
       setIsMagicActive(true);
       setMagicSpeech('');
-      setFullSpeech(''); // <-- reset fullSpeech too
+      setFullSpeech(''); //reset fullSpeech
       return;
     }
 
-    // Stop magic keyword
-    if (isMagicActive && lowerText.includes("stop")) {
+    // Stop Magic behalf of the keyword...
+    if (isMagicActive && lowerText.includes(endKeyword)) {
       console.log("Magic recording stopped! Sending to backend...");
       setIsMagicActive(false);
 
@@ -176,7 +181,7 @@ function App() {
 
       if (cleanText) {
         setMagicSpeech(prev => prev ? prev + ' ' + cleanText : cleanText);
-        setFullSpeech(prev => prev ? prev + ' ' + cleanText : cleanText); // <-- important
+        setFullSpeech(prev => prev ? prev + ' ' + cleanText : cleanText);
 
         if (ws.current && ws.current.readyState === WebSocket.OPEN) {
           ws.current.send(JSON.stringify({
@@ -225,7 +230,7 @@ function App() {
 
         // strt recording when both joined the session
         if (data.type === "ready" && role === "magician") {
-          alert("Spectator is connected — starting recording...");
+          console.log("Spectator is connected — starting recording...");
           startListening();
         }
         // Stop recording when summary received
@@ -324,20 +329,20 @@ function App() {
     return (
       <div className="container magician-view">
         <div className="header">
-          <h1>Magic Session: {sessionId}</h1>
+          {/* <h1>Magic: {sessionId}</h1> */}
+          <h1>Magic Session </h1>
           <div className={`connection-status ${connectionStatus}`}>
             Status: {connectionStatus}
           </div>
         </div>
-
-        <h2>Speak to the Spectator</h2>
+        <div className='keyword_container'>
+          <input type="text" placeholder='Enter Start Keyword' onChange={(e) => setStartKeyword(e.target.value)} disabled={isListening} value={startKeyword} />
+          <input type="text" placeholder='Enter End Keyword' onChange={(e) => setEndKeyword(e.target.value)} disabled={isListening} value={endKeyword} />
+        </div>
 
         <div className="recording-controls">
-          <button
-            onClick={isListening ? stopListening : startListening}
-            className={`control-button ${isListening ? 'stop-button' : 'start-button'}`}
-          >
-            {isListening ? '⏹️ Stop Speaking' : '🎤 Start Speaking'}
+          <button onClick={isListening ? stopListening : startListening} className={`control-button ${isListening ? 'stop-button' : 'start-button'}`} >
+            🎤 {isListening ? 'Stop Speaking' : 'Start Speaking'}
           </button>
         </div>
 
@@ -371,13 +376,14 @@ function App() {
     return (
       <div className="container center spectator-view">
         <div className="header">
-          <h1>Session: {sessionId}</h1>
+          {/* <h1>Session: {sessionId}</h1> */}
+          <h1>Magic Session</h1>
           <div className={`connection-status ${connectionStatus}`}>
             Status: {connectionStatus}
           </div>
         </div>
 
-        <h1>The Magician Says:</h1>
+        {/* <h1>The Magician Says:</h1> */}
         <div className="transcript-box">
           {transcript ? (
             <h2>"{transcript}"</h2>
