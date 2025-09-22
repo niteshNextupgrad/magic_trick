@@ -96,7 +96,6 @@ const useWebSocket = (sessionId, role) => {
 };
 
 function App() {
-  const [isCopied, setIsCopied] = useState(false)
   const [role, setRole] = useState(null);
   const [sessionId, setSessionId] = useState('');
   const [transcript, setTranscript] = useState('');
@@ -105,14 +104,12 @@ function App() {
   const [browserSupportsSpeech, setBrowserSupportsSpeech] = useState(true);
   const [isMagicActive, setIsMagicActive] = useState(false);
   const [magicSpeech, setMagicSpeech] = useState('');
+  const [isCopied, setIsCopied] = useState(false)
+
+
+  // const silenceTimerRef = useRef(null);
 
   const { ws, connectionStatus } = useWebSocket(sessionId, role);
-
-  // const handleLogout = () => {
-  //   if (!confirm("Are you sure?")) return
-  //   window.sessionStorage.clear()
-  //   window.location.reload()
-  // }
 
   // Use react-speech-recognition hook
   const {
@@ -143,64 +140,58 @@ function App() {
   useEffect(() => {
     if (role !== 'magician' || !speechTranscript) return;
 
-    const lowerText = speechTranscript.toLowerCase();
+    let lowerText = speechTranscript.toLowerCase();
+    let cleanText = speechTranscript;
 
     // Start magic keyword
     if (!isMagicActive && lowerText.includes("start magic")) {
       console.log("Magic recording started!");
       setIsMagicActive(true);
       setMagicSpeech('');
-      resetTranscript(); // Reset to avoid including "start magic" itself
+      setFullSpeech(''); // <-- reset fullSpeech too
       return;
     }
 
     // Stop magic keyword
-    if (isMagicActive && lowerText.includes("stop magic")) {
+    if (isMagicActive && lowerText.includes("stop")) {
       console.log("Magic recording stopped! Sending to backend...");
       setIsMagicActive(false);
 
-      if (ws.current && ws.current.readyState === WebSocket.OPEN && magicSpeech.trim()) {
+      if (ws.current && ws.current.readyState === WebSocket.OPEN && fullSpeech.trim()) {
         ws.current.send(JSON.stringify({
           type: "summarize",
-          text: magicSpeech,
+          text: fullSpeech, // <-- use fullSpeech
           timestamp: Date.now()
         }));
       }
+
       setMagicSpeech('');
-      resetTranscript();
+      setFullSpeech('');
       return;
     }
 
     // If magic is active, accumulate speech and send to spectator
     if (isMagicActive) {
-      const newSpeech = speechTranscript;
-      setMagicSpeech(prev => prev ? prev + ' ' + newSpeech : newSpeech);
+      cleanText = cleanText.replace(/start magic/gi, '').replace(/stop/gi, '').trim();
 
-      // Send to spectator in real-time
-      if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-        ws.current.send(JSON.stringify({
-          type: "test",
-          message: newSpeech,
-          timestamp: Date.now()
-        }));
-      }
+      if (cleanText) {
+        setMagicSpeech(prev => prev ? prev + ' ' + cleanText : cleanText);
+        setFullSpeech(prev => prev ? prev + ' ' + cleanText : cleanText); // <-- important
 
-      setTranscript(speechTranscript); // view for magician
-    } else {
-      // If not in magic mode, still send to spectator but don't accumulate for summarization
-      if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-        ws.current.send(JSON.stringify({
-          type: "test",
-          message: speechTranscript,
-          timestamp: Date.now()
-        }));
+        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+          ws.current.send(JSON.stringify({
+            type: "test",
+            message: cleanText,
+            timestamp: Date.now()
+          }));
+        }
+
+        setTranscript(cleanText);
       }
-      setTranscript(speechTranscript);
     }
-
   }, [speechTranscript]);
 
-  // Handle spectator receiving transcript
+
   useEffect(() => {
     if (role === 'spectator' && ws.current) {
       const handleMessage = (event) => {
@@ -232,9 +223,9 @@ function App() {
       try {
         const data = JSON.parse(event.data);
 
-        // Start recording when both joined the session
+        // strt recording when both joined the session
         if (data.type === "ready" && role === "magician") {
-          // alert("Spectator is connected — starting recording...");
+          alert("Spectator is connected — starting recording...");
           startListening();
         }
         // Stop recording when summary received
@@ -253,6 +244,15 @@ function App() {
     };
   }, [role, ws]);
 
+
+  // const resetSilenceTimer = () => {
+  //   clearTimeout(silenceTimerRef.current);
+  //   silenceTimerRef.current = setTimeout(() => {
+  //     console.log("Silent for 10s stopping...");
+  //     stopListening();
+  //   }, 10000); // 10 seconds
+  // };
+
   const startListening = () => {
     if (role === 'magician') {
       try {
@@ -260,27 +260,41 @@ function App() {
         setIsListening(true);
         resetTranscript();
         setFullSpeech('');
+        // resetSilenceTimer();
         console.log("Started listening...");
       } catch (error) {
         console.error("Error starting recognition:", error);
       }
     }
   };
-
   const stopListening = () => {
     if (role === 'magician') {
       try {
         SpeechRecognition.stopListening();
         setIsListening(false);
-        console.log("Stopped listening");
+        setIsMagicActive(false);
+
+        console.log("Stopped listening and sending transcript...");
+
+        // Send fullSpeech accumulated during magic session
+        if (ws.current && ws.current.readyState === WebSocket.OPEN && fullSpeech.trim()) {
+          ws.current.send(JSON.stringify({
+            type: "summarize",
+            text: fullSpeech,
+            timestamp: Date.now(),
+          }));
+        }
 
         resetTranscript();
         setTranscript('');
+        setMagicSpeech('');
+        setFullSpeech('');
       } catch (error) {
         console.error("Error stopping recognition:", error);
       }
     }
   };
+
 
   // Update isListening state based on speech recognition
   useEffect(() => {
@@ -289,12 +303,6 @@ function App() {
 
   // Share link for spectator
   const getSpectatorLink = () => `${window.location.origin}${window.location.pathname}?role=spectator&session=${sessionId}`;
-
-  // Copy link to clipboard
-  const copyLink = () => {
-    navigator.clipboard.writeText(getSpectatorLink());
-    setIsCopied(true)
-  };
 
   if (!role) {
     return <LoginPage />
@@ -320,16 +328,9 @@ function App() {
           <div className={`connection-status ${connectionStatus}`}>
             Status: {connectionStatus}
           </div>
-          {/* <button onClick={handleLogout}>Logout</button> */}
         </div>
 
-        {/* <h2>Speak to the Spectator</h2> */}
-
-        {isMagicActive && (
-          <div className="magic-active-indicator">
-            <h3>Magic Mode Active - Speaking to AI</h3>
-          </div>
-        )}
+        <h2>Speak to the Spectator</h2>
 
         <div className="recording-controls">
           <button
@@ -353,7 +354,7 @@ function App() {
           <p>Ask the spectator to scan this QR code or go to this link:</p>
           <div className="link-container">
             <input type="text" value={getSpectatorLink()} readOnly />
-            <button onClick={copyLink} className="copy-button">{isCopied ? "Copied" : "Copy"}</button>
+            <button onClick={() => { navigator.clipboard.writeText(getSpectatorLink()); setIsCopied(true) }} className="copy-button">{isCopied ? 'Copied' : "Copy"}</button>
           </div>
           <img
             src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
@@ -376,14 +377,14 @@ function App() {
           </div>
         </div>
 
-        {/* <h1>The Magician Says:</h1>
+        <h1>The Magician Says:</h1>
         <div className="transcript-box">
           {transcript ? (
             <h2>"{transcript}"</h2>
           ) : (
             <p>Waiting for the magician to speak...</p>
           )}
-        </div> */}
+        </div>
       </div>
     );
   }

@@ -199,6 +199,9 @@ img {
     margin-top: 12px;
     border-radius: 8px;
 }
+.logoutBtn{
+    margin: 2px;
+}
 
 /* Responsive */
 @media (max-width: 600px) {
