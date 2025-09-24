@@ -336,8 +336,14 @@ function App() {
           </div>
         </div>
         <div className='keyword_container'>
-          <input type="text" placeholder='Enter Start Keyword' onChange={(e) => setStartKeyword(e.target.value)} disabled={isListening} value={startKeyword} />
-          <input type="text" placeholder='Enter End Keyword' onChange={(e) => setEndKeyword(e.target.value)} disabled={isListening} value={endKeyword} />
+          <div>
+            <label>Start Keyword:</label>
+            <input type="text" placeholder='Enter Start Keyword' onChange={(e) => setStartKeyword(e.target.value)} disabled={isListening} value={startKeyword} />
+          </div>
+          <div>
+            <label>End Keyword:</label>
+            <input type="text" placeholder='Enter End Keyword' onChange={(e) => setEndKeyword(e.target.value)} disabled={isListening} value={endKeyword} />
+          </div>
         </div>
 
         <div className="recording-controls">
@@ -345,6 +351,9 @@ function App() {
             🎤 {isListening ? 'Stop Speaking' : 'Start Speaking'}
           </button>
         </div>
+        {
+          isListening && <span>{isMagicActive ? <span style={{ fontWeight: 'bold' }}>Listening Started</span> : 'Waiting for the keyword to start'}</span>
+        }
 
         {isListening && (
           <div className="listening-status">
@@ -359,7 +368,7 @@ function App() {
           <p>Ask the spectator to scan this QR code or go to this link:</p>
           <div className="link-container">
             <input type="text" value={getSpectatorLink()} readOnly />
-            <button onClick={() => { navigator.clipboard.writeText(getSpectatorLink()); setIsCopied(true) }} className="copy-button">{isCopied ? 'Copied' : "Copy"}</button>
+            <button onClick={() => { navigator.clipboard.writeText(getSpectatorLink()); setIsCopied(true); setTimeout(() => setIsCopied(false), 2000) }} className="copy-button">{isCopied ? 'Copied' : "Copy"}</button>
           </div>
           <img
             src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
