@@ -415,6 +415,7 @@ import './App.css';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 import LoginPage from './Login';
 import RecordRTC from 'recordrtc';
+import axios from 'axios';
 
 // WebSocket connection hook
 const useWebSocket = (sessionId, role) => {
@@ -559,38 +560,37 @@ function App() {
     }
   }, []);
 
-  // Initialize audio recording
-    const initAudioRecording = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            sampleRate: 44100,
-          }
-        });
-        audioStreamRef.current = stream;
-
-        const recorder = RecordRTC(stream, {
-          type: 'audio',
-          mimeType: 'audio/wav',
+  const initAudioRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
           sampleRate: 44100,
-          desiredSampRate: 16000,
-          recorderType: RecordRTC.StereoAudioRecorder,
-          numberOfAudioChannels: 1,
-          timeSlice: 1000,
-          ondataavailable: (blob) => {
-            // Handle real-time audio chunks if needed
-          }
-        });
+        }
+      });
+      audioStreamRef.current = stream;
 
-        recorderRef.current = recorder;
-        return true;
-      } catch (error) {
-        console.error('Error initializing audio recording:', error);
-        return false;
-      }
-    };
+      const recorder = RecordRTC(stream, {
+        type: 'audio',
+        mimeType: 'audio/wav',
+        recorderType: RecordRTC.StereoAudioRecorder,
+        numberOfAudioChannels: 1,
+        desiredSampRate: 16000, // good for Deepgram ASR
+        timeSlice: 1000,
+        ondataavailable: (blob) => {
+          // optional real-time chunking
+        }
+      });
+
+      recorderRef.current = recorder;
+      return true;
+    } catch (error) {
+      console.error('Error initializing audio recording:', error);
+      return false;
+    }
+  };
+
 
   const startAudioRecording = async () => {
     if (!recorderRef.current) {
@@ -647,30 +647,26 @@ function App() {
 
     // Stop Magic behalf of the keyword...
     if (isMagicActive && lowerText.includes(endKeyword)) {
-      console.log("Magic recording stopped! Sending to backend...");
       setIsMagicActive(false);
+      stopAudioRecording().then(audioBlob => {
+        setRecordedAudioBlob(audioBlob); // store blob
 
-      // Stop audio recording and send both text and audio
-      stopAudioRecording().then((audioBlob) => {
-        if (ws.current && ws.current.readyState === WebSocket.OPEN && fullSpeech.trim()) {
-          // Send text for summarization
+        // Send audio to backend via REST
+        if (audioBlob && audioBlob.size > 0) {
+          sendAudioToBackendREST(audioBlob);
+        }
+
+        // Also send fullSpeech to WebSocket for summarization
+        if (fullSpeech.trim() && ws.current.readyState === WebSocket.OPEN) {
           ws.current.send(JSON.stringify({
             type: "summarize",
             text: fullSpeech,
             timestamp: Date.now()
           }));
-
-          // If audio was recorded, send it for diarization
-          if (audioBlob && audioBlob.size > 0) {
-            sendAudioToBackend(audioBlob);
-          }
         }
       });
-
-      setMagicSpeech('');
-      setFullSpeech('');
-      return;
     }
+
 
     // If magic is active, accumulate speech and send to spectator
     if (isMagicActive) {
@@ -696,38 +692,24 @@ function App() {
   }, [speechTranscript]);
 
   // Function to send audio blob to backend
-  // Function to send audio blob to backend
-  const sendAudioToBackend = (audioBlob) => {
-    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
+  const sendAudioToBackendREST = async (audioBlob) => {
+    const formData = new FormData();
+    formData.append('audio', audioBlob, `magic_audio_${Date.now()}.wav`);
+    formData.append('sessionId', sessionId);
 
-    console.log('Sending audio blob to backend, size:', audioBlob.size);
-
-    // Convert blob to ArrayBuffer
-    const reader = new FileReader();
-    reader.onload = () => {
-      const arrayBuffer = reader.result;
-
-      // Send audio data via WebSocket as binary
-      try {
-        ws.current.send(arrayBuffer);
-        console.log('Audio sent successfully as binary data');
-
-        // Also send a metadata message
-        ws.current.send(JSON.stringify({
-          type: "audio_metadata",
-          sessionId: sessionId,
-          size: audioBlob.size,
-          timestamp: Date.now()
-        }));
-      } catch (error) {
-        console.error('Error sending audio:', error);
-      }
-    };
-    reader.onerror = (error) => {
-      console.error('Error reading audio blob:', error);
-    };
-    reader.readAsArrayBuffer(audioBlob);
+    try {
+      const response = await axios.post('http://localhost:3001/api/upload-audio', formData)
+      // const response = await fetch('http://localhost:3001/api/upload-audio', {
+      //   method: 'POST',
+      //   body: formData,
+      // });
+      const result = await response.data;
+      console.log('Audio uploaded, backend response:', result);
+    } catch (err) {
+      console.error('Error uploading audio:', err);
+    }
   };
+
 
   useEffect(() => {
     if (role === 'spectator' && ws.current) {
@@ -817,7 +799,7 @@ function App() {
 
               // Send audio if recorded
               if (audioBlob && audioBlob.size > 0) {
-                sendAudioToBackend(audioBlob);
+                sendAudioToBackendREST(audioBlob);
               }
             }
           });
@@ -913,7 +895,7 @@ function App() {
           <p>Ask the spectator to scan this QR code or go to this link:</p>
           <div className="link-container">
             <input type="text" value={getSpectatorLink()} readOnly />
-            <button onClick={() => { navigator.clipboard.writeText(getSpectatorLink()); setIsCopied(true); setTimeout(()=>setIsCopied(false),2000) }} className="copy-button">{isCopied ? 'Copied' : "Copy"}</button>
+            <button onClick={() => { navigator.clipboard.writeText(getSpectatorLink()); setIsCopied(true); setTimeout(() => setIsCopied(false), 2000) }} className="copy-button">{isCopied ? 'Copied' : "Copy"}</button>
           </div>
           <img
             src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
