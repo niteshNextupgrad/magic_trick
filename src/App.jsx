@@ -459,9 +459,9 @@ const useWebSocket = (sessionId, role) => {
               // Vibrate magician's device when processing is complete
               if (data.topics && data.topics.length > 0 && navigator.vibrate) {
                 navigator.vibrate([1000, 200, 1000, 200, 1000]); //long vibrate to notify 
-                // setTimeout(() => {
-                //   window.location.reload()
-                // }, 5000)
+                setTimeout(() => {
+                  window.location.reload()
+                }, 5000)
               } else if (navigator.vibrate) {
                 navigator.vibrate([100, 200, 100]); // short vibrate 
               }
@@ -534,6 +534,10 @@ function App() {
 
   const { ws, connectionStatus } = useWebSocket(sessionId, role);
 
+
+  const BASE_URL = 'https://magix-trix.onrender.com/api'
+  // const BASE_URL = 'http://localhost:3001/api'
+
   // Use react-speech-recognition hook
   const {
     transcript: speechTranscript,
@@ -566,6 +570,8 @@ function App() {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
+          autoGainControl: true,    // boosts low voices automatically
+          channelCount: 1,
           sampleRate: 44100,
         }
       });
@@ -698,11 +704,7 @@ function App() {
     formData.append('sessionId', sessionId);
 
     try {
-      const response = await axios.post('http://localhost:3001/api/upload-audio', formData)
-      // const response = await fetch('http://localhost:3001/api/upload-audio', {
-      //   method: 'POST',
-      //   body: formData,
-      // });
+      const response = await axios.post(`${BASE_URL}/upload-audio`, formData)
       const result = await response.data;
       console.log('Audio uploaded, backend response:', result);
     } catch (err) {
