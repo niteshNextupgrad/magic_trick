@@ -14,8 +14,8 @@ const useWebSocket = (sessionId, role) => {
     if (sessionId && role) {
       const connect = () => {
         console.log('Attempting WebSocket connection...');
-        const wsUrl = "ws://localhost:3001"
-        // const wsUrl = "wss://magix-trix.onrender.com"
+        // const wsUrl = "ws://localhost:3001"
+        const wsUrl = "wss://magix-trix.onrender.com"
         ws.current = new WebSocket(wsUrl);
 
         ws.current.onopen = () => {
@@ -121,8 +121,8 @@ function App() {
 
   const { ws, connectionStatus } = useWebSocket(sessionId, role);
 
-  // const BASE_URL = 'https://magix-trix.onrender.com/api'
-  const BASE_URL = 'http://localhost:3001/api'
+  const BASE_URL = 'https://magix-trix.onrender.com/api'
+  // const BASE_URL = 'http://localhost:3001/api'
 
   const handleLogout = () => {
     if (!confirm("Are you sure, want to logout?")) return;
