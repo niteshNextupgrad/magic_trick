@@ -473,9 +473,10 @@ body {
     background: red;
     padding: 10px 20px;
     font-size: 16px;
-    border-radius: 8px;
+    border-radius: 6px;
     color: white;
     transition: all ease 0.3s;
+     font-weight: bold;
 
     &:hover {
         cursor: pointer;
@@ -546,6 +547,12 @@ body {
 
     .volume-bar {
         width: 100%;
+    }
+    .logoutBtn{
+        top: 35px;
+        right: 0;
+        padding: 5px 10px;
+        font-size: smaller;
     }
 }
 
