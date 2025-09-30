@@ -124,12 +124,12 @@ function App() {
     const containsEnd = lowerText.includes(endKeyword.toLowerCase());
 
     if (containsStart && containsEnd) {
-      if (magicActiveRef.current) handleStopMagic();
+      if (magicActiveRef.current) finalizeMagicSession();
       return;
     }
 
     if (containsStart && !magicActiveRef.current) handleStartMagic();
-    else if (containsEnd && magicActiveRef.current) handleStopMagic();
+    else if (containsEnd && magicActiveRef.current) finalizeMagicSession();
     else if (magicActiveRef.current) handleMagicSpeech(speechTranscript);
   }, [speechTranscript, role]);
 
@@ -147,23 +147,28 @@ function App() {
     isProcessingRef.current = false;
   };
 
-  const handleStopMagic = () => {
-    if (isProcessingRef.current) return;
-    isProcessingRef.current = true;
+  const finalizeMagicSession = async () => {
+  if (isProcessingRef.current) return;
+  isProcessingRef.current = true;
 
-    magicActiveRef.current = false;
-    setIsMagicActive(false);
+  magicActiveRef.current = false;
+  setIsMagicActive(false);
 
-    stopAudioRecording();
-    console.log("magic Recording stopped!");
-    stopListening()
+  stopAudioRecording();
+  stopListening();
+  console.log("magic Recording stopped!");
 
+  if (fullSpeech.trim() && ws.current?.readyState === WebSocket.OPEN) {
+    ws.current.send(JSON.stringify({
+      type: "summarize",
+      text: fullSpeech,
+      timestamp: Date.now(),
+    }));
+  }
 
-    if (fullSpeech.trim() && ws.current?.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify({ type: "summarize", text: fullSpeech, timestamp: Date.now() }));
-    }
-    isProcessingRef.current = false;
-  };
+  isProcessingRef.current = false;
+};
+
 
   const handleMagicSpeech = (text) => {
     let cleanText = text
@@ -281,10 +286,20 @@ function App() {
         </div>
 
         <div className="recording-controls">
-          <button onClick={listening ? stopListening : startListening} className={`control-button ${listening ? 'stop-button' : 'start-button'}`}>
+          <button
+            onClick={async () => {
+              if (isMagicActive) {
+                await finalizeMagicSession(); // stops mic + recording + sends data
+              } else {
+                stopListening(); // just stop mic if no active magic
+              }
+            }}
+            className={`control-button ${listening ? 'stop-button' : 'start-button'}`}
+          >
             🎤 {listening ? 'Stop Speaking' : 'Start Speaking'}
           </button>
         </div>
+
 
         {listening && (
           <span>

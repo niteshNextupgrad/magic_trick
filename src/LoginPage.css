@@ -67,7 +67,7 @@ body {
 }
 
 .login-box h2{
-  color: white;
+  /* color: white; */
   margin-bottom: 20px;
 }
 .login-box:hover {
