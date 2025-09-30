@@ -367,9 +367,7 @@ const useWebSocket = (sessionId, role) => {
   useEffect(() => {
     if (sessionId && role) {
       const connect = () => {
-        // const wsUrl = "ws://localhost:3001"
-        const wsUrl = "wss://magix-trix.onrender.com"
-
+        const wsUrl = "wss://magix-trix.onrender.com";
         ws.current = new WebSocket(wsUrl);
 
         ws.current.onopen = () => {
@@ -384,9 +382,8 @@ const useWebSocket = (sessionId, role) => {
         ws.current.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-
             if (data.type === 'joined') console.log("Joined:", data.sessionId);
-
+            
             if (data.type === 'summarize_complete' && role === 'magician') {
               if (data.topic?.length > 0 && navigator.vibrate) {
                 navigator.vibrate([1000, 200, 1000, 200, 1000]);
@@ -421,7 +418,7 @@ const useWebSocket = (sessionId, role) => {
         if (ws.current && ws.current.readyState !== WebSocket.CLOSED) ws.current.close();
       };
     }
-  }, [sessionId, role]);
+  }, [sessionId, role]); // These are stable dependencies
 
   return { ws, connectionStatus };
 };
@@ -443,11 +440,10 @@ function App() {
   const isProcessingRef = useRef(false);
   const magicActiveRef = useRef(false);
   const speechBufferRef = useRef('');
+  const lastTranscriptRef = useRef('');
 
   const { ws, connectionStatus } = useWebSocket(sessionId, role);
-
-  // const BASE_URL = "http://localhost:3001/api"
-  const BASE_URL = 'https://magix-trix.onrender.com/api'
+  const BASE_URL = 'https://magix-trix.onrender.com/api';
 
   // --- Native Speech Hook ---
   const {
@@ -459,7 +455,7 @@ function App() {
     resetTranscript,
   } = useSpeechToText("en-US");
 
-  // Parse URL
+  // Parse URL - RUNS ONLY ONCE
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const roleParam = params.get('role');
@@ -468,9 +464,79 @@ function App() {
       setRole(roleParam);
       setSessionId(sessionParam);
     }
-  }, []);
+  }, []); // Empty dependency array - runs once
 
-  // --- Improved Keyword detection ---
+  // --- Stable Event Handlers with useCallback ---
+  const handleMagicSpeech = useCallback((text) => {
+    if (!text.trim() || text === lastTranscriptRef.current) return;
+    
+    lastTranscriptRef.current = text;
+
+    let cleanText = text
+      .replace(new RegExp(startKeyword, 'gi'), '')
+      .replace(new RegExp(endKeyword, 'gi'), '')
+      .trim();
+
+    if (cleanText) {
+      setMagicSpeech(prev => prev ? prev + ' ' + cleanText : cleanText);
+      setFullSpeech(prev => prev ? prev + ' ' + cleanText : cleanText);
+      setTranscript(cleanText);
+
+      if (ws.current?.readyState === WebSocket.OPEN) {
+        ws.current.send(JSON.stringify({ 
+          type: "transcript", 
+          word: cleanText, 
+          timestamp: Date.now() 
+        }));
+      }
+    }
+  }, [startKeyword, endKeyword]); // Only depend on keywords that change rarely
+
+  const handleStartMagic = useCallback(async () => {
+    if (isProcessingRef.current) return;
+    isProcessingRef.current = true;
+
+    console.log("🎯 Magic session STARTED");
+    magicActiveRef.current = true;
+    setIsMagicActive(true);
+    setMagicSpeech('');
+    setFullSpeech('');
+    resetTranscript();
+    speechBufferRef.current = '';
+    lastTranscriptRef.current = '';
+    
+    await startAudioRecording();
+    
+    isProcessingRef.current = false;
+  }, [resetTranscript]); // Only depend on resetTranscript
+
+  const finalizeMagicSession = useCallback(async () => {
+    if (isProcessingRef.current) return;
+    isProcessingRef.current = true;
+
+    console.log("🎯 Magic session STOPPED");
+    magicActiveRef.current = false;
+    setIsMagicActive(false);
+
+    stopAudioRecording();
+    stopListening()
+    
+    if (fullSpeech.trim() && ws.current?.readyState === WebSocket.OPEN) {
+      ws.current.send(JSON.stringify({
+        type: "summarize",
+        text: fullSpeech,
+        timestamp: Date.now(),
+      }));
+    }
+
+    speechBufferRef.current = '';
+    lastTranscriptRef.current = '';
+    resetTranscript();
+    
+    isProcessingRef.current = false;
+  }, [fullSpeech, resetTranscript]); // Stable dependencies
+
+  // --- Improved Keyword detection with stable dependencies ---
   useEffect(() => {
     if (role !== 'magician' || !speechTranscript || isProcessingRef.current) return;
 
@@ -495,83 +561,16 @@ function App() {
     } else if (magicActiveRef.current) {
       handleMagicSpeech(speechBufferRef.current);
     }
-  }, [speechTranscript, role, startKeyword, endKeyword]);
+  }, [speechTranscript, role, handleStartMagic, finalizeMagicSession, handleMagicSpeech, startKeyword, endKeyword]);
+  // Now all functions are stable with useCallback
 
-  // --- Handlers ---
-  const handleStartMagic = async () => {
-    if (isProcessingRef.current) return;
-    isProcessingRef.current = true;
-
-    console.log("🎯 Magic session STARTED");
-    magicActiveRef.current = true;
-    setIsMagicActive(true);
-    setMagicSpeech('');
-    setFullSpeech('');
-    resetTranscript();
-    
-    // Start audio recording first, then ensure speech recognition continues
-    await startAudioRecording();
-    
-    isProcessingRef.current = false;
-  };
-
-  const finalizeMagicSession = async () => {
-    if (isProcessingRef.current) return;
-    isProcessingRef.current = true;
-
-    console.log("🎯 Magic session STOPPED");
-    magicActiveRef.current = false;
-    setIsMagicActive(false);
-
-    // Stop audio recording but keep speech recognition running
-    stopAudioRecording();
-    
-    // Send final speech data
-    if (fullSpeech.trim() && ws.current?.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify({
-        type: "summarize",
-        text: fullSpeech,
-        timestamp: Date.now(),
-      }));
-    }
-
-    // Clear buffers
-    speechBufferRef.current = '';
-    resetTranscript();
-    
-    isProcessingRef.current = false;
-  };
-
-  const handleMagicSpeech = useCallback((text) => {
-    if (!text.trim()) return;
-
-    let cleanText = text
-      .replace(new RegExp(startKeyword, 'gi'), '')
-      .replace(new RegExp(endKeyword, 'gi'), '')
-      .trim();
-
-    if (cleanText) {
-      const updatedSpeech = magicSpeech ? magicSpeech + ' ' + cleanText : cleanText;
-      setMagicSpeech(updatedSpeech);
-      setFullSpeech(updatedSpeech);
-      setTranscript(cleanText);
-
-      if (ws.current?.readyState === WebSocket.OPEN) {
-        ws.current.send(JSON.stringify({ 
-          type: "transcript", 
-          word: cleanText, 
-          timestamp: Date.now() 
-        }));
-      }
-    }
-  }, [magicSpeech, startKeyword, endKeyword, ws]);
-
-  // --- Improved Audio Recording ---
-  const initAudioRecording = async () => {
+  // --- Audio Recording Functions ---
+  const initAudioRecording = useCallback(async () => {
     try {
       // Stop any existing streams first
       if (audioStream) {
         audioStream.getTracks().forEach(track => track.stop());
+        setAudioStream(null);
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -595,7 +594,8 @@ function App() {
         if (audioBlob.size > 0) {
           await sendAudioToBackendREST(audioBlob);
         }
-        // Don't stop the stream here - let it be managed by the component
+        // Clean up stream
+        stream.getTracks().forEach(track => track.stop());
       };
 
       setMediaRecorder(recorder);
@@ -605,9 +605,9 @@ function App() {
       console.error('Init audio error:', error); 
       return null; 
     }
-  };
+  }, [audioStream]); // Only depend on audioStream
 
-  const startAudioRecording = async () => {
+  const startAudioRecording = useCallback(async () => {
     if (mediaRecorder?.state === 'recording') {
       console.log("Audio recording already in progress");
       return;
@@ -618,9 +618,9 @@ function App() {
       recorder.start(1000);
       console.log("Audio recording started");
     }
-  };
+  }, [mediaRecorder, initAudioRecording]);
 
-  const stopAudioRecording = () => {
+  const stopAudioRecording = useCallback(() => {
     if (mediaRecorder?.state === 'recording') {
       mediaRecorder.stop();
       console.log("Audio recording stopped");
@@ -632,9 +632,9 @@ function App() {
       setAudioStream(null);
     }
     setMediaRecorder(null);
-  };
+  }, [mediaRecorder, audioStream]);
 
-  const sendAudioToBackendREST = async (audioBlob) => {
+  const sendAudioToBackendREST = useCallback(async (audioBlob) => {
     console.log("Sending audio to backend for processing");
     try {
       const formData = new FormData();
@@ -647,9 +647,9 @@ function App() {
     } catch (err) { 
       console.error('Audio upload error:', err); 
     }
-  };
+  }, [sessionId, BASE_URL]);
 
-  // --- Auto-mic on both joined ---
+  // --- Auto-mic on both joined - FIXED with stable dependencies ---
   useEffect(() => {
     if (!ws.current || role !== 'magician') return;
     
@@ -666,31 +666,65 @@ function App() {
     };
     
     ws.current.addEventListener("message", handleReady);
-    return () => ws.current?.removeEventListener("message", handleReady);
-  }, [role, ws, listening, startListening]);
+    return () => {
+      if (ws.current) {
+        ws.current.removeEventListener("message", handleReady);
+      }
+    };
+  }, [role, listening, startListening]); // Stable dependencies now
 
-  // Cleanup on unmount
+  // Cleanup on unmount - RUNS ONLY ONCE
   useEffect(() => {
     return () => {
+      console.log("Cleaning up...");
       if (audioStream) {
         audioStream.getTracks().forEach(track => track.stop());
       }
+      if (mediaRecorder?.state === 'recording') {
+        mediaRecorder.stop();
+      }
       stopListening();
     };
-  }, [audioStream, stopListening]);
+  }, []); // Empty dependency array - runs only on unmount
 
-  const handleLogout = () => {
+  // --- Stable UI Handlers ---
+  const handleLogout = useCallback(() => {
     if (!window.confirm("Are you sure you want to logout?")) return;
     window.sessionStorage.clear();
     window.location.reload();
-  };
+  }, []);
 
-  const getSpectatorLink = () => 
-    `${window.location.origin}${window.location.pathname}?role=spectator&session=${sessionId}`;
+  const getSpectatorLink = useCallback(() => 
+    `${window.location.origin}${window.location.pathname}?role=spectator&session=${sessionId}`,
+    [sessionId]
+  );
+
+  const handleMicToggle = useCallback(async () => {
+    if (listening) {
+      stopListening();
+      if (isMagicActive) {
+        await finalizeMagicSession();
+      }
+    } else {
+      startListening();
+    }
+  }, [listening, isMagicActive, stopListening, startListening, finalizeMagicSession]);
+
+  const handleCopyLink = useCallback(() => {
+    navigator.clipboard.writeText(getSpectatorLink()); 
+    setIsCopied(true); 
+    setTimeout(() => setIsCopied(false), 2000);
+  }, [getSpectatorLink]);
 
   // --- Render ---
   if (!role) return <LoginPage />;
-  if (!browserSupportsSpeechRecognition) return <div className="container center"><h1>Browser does not support speech recognition</h1></div>;
+  if (!browserSupportsSpeechRecognition) {
+    return (
+      <div className="container center">
+        <h1>Browser does not support speech recognition</h1>
+      </div>
+    );
+  }
 
   if (role === 'magician') {
     const storedUser = JSON.parse(window.sessionStorage.getItem("user"));
@@ -703,32 +737,35 @@ function App() {
         <div className="header">
           <button className='logoutBtn' onClick={handleLogout}>Logout</button>
           <h1>Magic Session</h1>
-          <div className={`connection-status ${connectionStatus}`}>Status: {connectionStatus}</div>
+          <div className={`connection-status ${connectionStatus}`}>
+            Status: {connectionStatus}
+          </div>
         </div>
 
         <div className='keyword_container'>
           <div>
             <label>Start Keyword:</label>
-            <input type="text" value={startKeyword} onChange={e => setStartKeyword(e.target.value)} disabled={listening} />
+            <input 
+              type="text" 
+              value={startKeyword} 
+              onChange={e => setStartKeyword(e.target.value)} 
+              disabled={listening} 
+            />
           </div>
           <div>
             <label>End Keyword:</label>
-            <input type="text" value={endKeyword} onChange={e => setEndKeyword(e.target.value)} disabled={listening} />
+            <input 
+              type="text" 
+              value={endKeyword} 
+              onChange={e => setEndKeyword(e.target.value)} 
+              disabled={listening} 
+            />
           </div>
         </div>
 
         <div className="recording-controls">
           <button
-            onClick={async () => {
-              if (listening) {
-                stopListening();
-                if (isMagicActive) {
-                  await finalizeMagicSession();
-                }
-              } else {
-                startListening();
-              }
-            }}
+            onClick={handleMicToggle}
             className={`control-button ${listening ? 'stop-button' : 'start-button'}`}
           >
             🎤 {listening ? 'Stop Listening' : 'Start Listening'}
@@ -738,14 +775,21 @@ function App() {
         {listening && (
           <div className="listening-status">
             <span>
-              {isMagicActive ?
-                <span style={{ fontWeight: 'bold', color: 'green' }}>🔴 Magic Active - Recording</span> :
-                <span style={{ color: 'blue' }}> Listening for keywords...</span>
-              }
+              {isMagicActive ? (
+                <span style={{ fontWeight: 'bold', color: 'green' }}>
+                  🔴 Magic Active - Recording
+                </span>
+              ) : (
+                <span style={{ color: 'blue' }}>
+                  Listening for keywords...
+                </span>
+              )}
             </span>
             
             <h3>You're saying:</h3>
-            <div className="current-transcript">{transcript || "Waiting for speech..."}</div>
+            <div className="current-transcript">
+              {transcript || "Waiting for speech..."}
+            </div>
             
             {isMagicActive && (
               <div className="audio-recording-indicator">
@@ -759,11 +803,7 @@ function App() {
           <p>Ask the spectator to scan this QR code or go to this link:</p>
           <div className="link-container">
             <input type="text" value={getSpectatorLink()} readOnly />
-            <button onClick={() => { 
-              navigator.clipboard.writeText(getSpectatorLink()); 
-              setIsCopied(true); 
-              setTimeout(() => setIsCopied(false), 2000); 
-            }} className="copy-button">
+            <button onClick={handleCopyLink} className="copy-button">
               {isCopied ? 'Copied' : "Copy"}
             </button>
           </div>
@@ -771,12 +811,6 @@ function App() {
             src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(getSpectatorLink())}`} 
             alt="Spectator QR Code" 
           />
-        </div>
-
-        {/* Debug info */}
-        <div style={{ marginTop: '20px', fontSize: '12px', color: '#666' }}>
-          <p>Debug: Listening: {listening ? 'Yes' : 'No'}, Magic Active: {isMagicActive ? 'Yes' : 'No'}</p>
-          <p>Current Buffer: {speechBufferRef.current.substring(0, 50)}...</p>
         </div>
       </div>
     );
@@ -787,11 +821,17 @@ function App() {
       <div className="container center spectator-view">
         <div className="header">
           <h1>Magic Session</h1>
-          <div className={`connection-status ${connectionStatus}`}>Status: {connectionStatus}</div>
+          <div className={`connection-status ${connectionStatus}`}>
+            Status: {connectionStatus}
+          </div>
         </div>
 
         <div className="transcript-box">
-          {transcript ? <h2>"{transcript}"</h2> : <p>Waiting for the magician to speak...</p>}
+          {transcript ? (
+            <h2>"{transcript}"</h2>
+          ) : (
+            <p>Waiting for the magician to speak...</p>
+          )}
         </div>
       </div>
     );
