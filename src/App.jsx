@@ -13,7 +13,8 @@ const useWebSocket = (sessionId, role) => {
   useEffect(() => {
     if (sessionId && role) {
       const connect = () => {
-        const wsUrl = "ws://localhost:3001"
+        // const wsUrl = "ws://localhost:3001"
+        const wsUrl = "wss://magix-trix.onrender.com"
 
         ws.current = new WebSocket(wsUrl);
 
@@ -90,7 +91,9 @@ function App() {
 
   const { ws, connectionStatus } = useWebSocket(sessionId, role);
 
-  const BASE_URL = "http://localhost:3001/api"
+  // const BASE_URL = "http://localhost:3001/api"
+  const BASE_URL = 'https://magix-trix.onrender.com/api'
+
   // --- Native Speech Hook ---
   const {
     transcript: speechTranscript,
@@ -139,7 +142,7 @@ function App() {
     setIsMagicActive(true);
     setMagicSpeech('');
     setFullSpeech('');
-
+    console.log("magic Recording started!");
     await startAudioRecording();
     isProcessingRef.current = false;
   };
