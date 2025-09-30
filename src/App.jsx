@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import LoginPage from './Login';
 import axios from 'axios';
 import { useSpeechToText } from './hooks/useSpeechToText';
 
-// --- WebSocket Hook (unchanged) ---
+// --- WebSocket Hook ---
 const useWebSocket = (sessionId, role) => {
   const ws = useRef(null);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
@@ -13,7 +13,9 @@ const useWebSocket = (sessionId, role) => {
   useEffect(() => {
     if (sessionId && role) {
       const connect = () => {
-        const wsUrl = "wss://magix-trix.onrender.com";
+        const wsUrl = "wss://magix-trix.onrender.com"
+        // const wsUrl = "ws://localhost:3001";
+
         ws.current = new WebSocket(wsUrl);
 
         ws.current.onopen = () => {
@@ -28,6 +30,7 @@ const useWebSocket = (sessionId, role) => {
         ws.current.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
+
             if (data.type === 'joined') console.log("Joined:", data.sessionId);
 
             if (data.type === 'summarize_complete' && role === 'magician') {
@@ -81,17 +84,18 @@ function App() {
   const [startKeyword, setStartKeyword] = useState("start magic");
   const [endKeyword, setEndKeyword] = useState("stop magic");
   const [mediaRecorder, setMediaRecorder] = useState(null);
-  const [audioStream, setAudioStream] = useState(null);
-  const [micError, setMicError] = useState('');
+  const [audioChunks, setAudioChunks] = useState([]);
 
   const isProcessingRef = useRef(false);
   const magicActiveRef = useRef(false);
-  const speechBufferRef = useRef('');
+  const audioChunksRef = useRef([]);
 
   const { ws, connectionStatus } = useWebSocket(sessionId, role);
-  const BASE_URL = 'https://magix-trix.onrender.com/api';
 
-  // --- Speech Recognition Hook ---
+  const BASE_URL = 'https://magix-trix.onrender.com/api'
+  // const BASE_URL = 'http://localhost:3001/api';
+
+  // --- Native Speech Hook ---
   const {
     transcript: speechTranscript,
     listening,
@@ -101,7 +105,7 @@ function App() {
     resetTranscript,
   } = useSpeechToText("en-US");
 
-  // --- Parse URL ---
+  // Parse URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const roleParam = params.get('role');
@@ -120,89 +124,69 @@ function App() {
     const containsStart = lowerText.includes(startKeyword.toLowerCase());
     const containsEnd = lowerText.includes(endKeyword.toLowerCase());
 
-    speechBufferRef.current = speechTranscript;
-
-    if (containsStart && containsEnd) {
-      if (magicActiveRef.current) finalizeMagicSession();
+    // If both keywords detected while magic is active, stop the session
+    if (containsStart && containsEnd && magicActiveRef.current) {
+      finalizeMagicSession();
       return;
     }
 
-    if (containsStart && !magicActiveRef.current) handleStartMagic();
-    else if (containsEnd && magicActiveRef.current) finalizeMagicSession();
-    else if (magicActiveRef.current) handleMagicSpeech(speechBufferRef.current);
+    // Start magic if keyword detected and not already active
+    if (containsStart && !magicActiveRef.current) {
+      handleStartMagic();
+    } 
+    // Stop magic if keyword detected and currently active
+    else if (containsEnd && magicActiveRef.current) {
+      finalizeMagicSession();
+    } 
+    // Capture speech during magic session
+    else if (magicActiveRef.current) {
+      handleMagicSpeech(speechTranscript);
+    }
   }, [speechTranscript, role, startKeyword, endKeyword]);
 
-  // --- Handlers with proper mic management ---
+  // --- Handlers ---
   const handleStartMagic = async () => {
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
-    setMicError('');
 
-    console.log("🔄 Starting magic session...");
-
-    try {
-      // 1. First stop speech recognition completely
-      stopListening();
-      
-      // 2. Wait longer for mobile browsers (500ms minimum)
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // 3. Start audio recording
-      await startAudioRecording();
-      
-      // 4. Update state only after successful recording start
-      magicActiveRef.current = true;
-      setIsMagicActive(true);
-      setMagicSpeech('');
-      setFullSpeech('');
-      resetTranscript();
-      
-      console.log("✅ Magic Recording started successfully!");
-      
-    } catch (error) {
-      console.error("❌ Failed to start magic session:", error);
-      setMicError('Failed to start recording. Please check microphone permissions.');
-      // Restart speech recognition if magic session fails
-      startListening();
-    } finally {
-      isProcessingRef.current = false;
-    }
+    magicActiveRef.current = true;
+    setIsMagicActive(true);
+    setMagicSpeech('');
+    setFullSpeech('');
+    audioChunksRef.current = [];
+    setAudioChunks([]);
+    
+    console.log("🎬 Magic Recording started!");
+    await startAudioRecording();
+    
+    isProcessingRef.current = false;
   };
 
   const finalizeMagicSession = async () => {
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
 
-    console.log("🔄 Stopping magic session...");
+    console.log("🛑 Magic Recording stopped!");
+    
+    magicActiveRef.current = false;
+    setIsMagicActive(false);
 
-    try {
-      magicActiveRef.current = false;
-      setIsMagicActive(false);
+    // Stop audio recording
+    await stopAudioRecording();
 
-      // 1. Stop audio recording first
-      stopAudioRecording();
-      
-      // 2. Wait for recording to fully stop
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // 3. Send final speech data
-      if (fullSpeech.trim() && ws.current?.readyState === WebSocket.OPEN) {
-        ws.current.send(JSON.stringify({
-          type: "summarize",
-          text: fullSpeech,
-          timestamp: Date.now(),
-        }));
-      }
+    // Reset transcript for next session but KEEP listening
+    resetTranscript();
 
-      console.log("✅ Magic Recording stopped successfully!");
-      
-    } catch (error) {
-      console.error("❌ Error stopping magic session:", error);
-    } finally {
-      // 4. Always restart speech recognition
-      startListening();
-      isProcessingRef.current = false;
+    // Send summary via WebSocket
+    if (fullSpeech.trim() && ws.current?.readyState === WebSocket.OPEN) {
+      ws.current.send(JSON.stringify({
+        type: "summarize",
+        text: fullSpeech,
+        timestamp: Date.now(),
+      }));
     }
+
+    isProcessingRef.current = false;
   };
 
   const handleMagicSpeech = (text) => {
@@ -218,142 +202,124 @@ function App() {
       setTranscript(cleanText);
 
       if (ws.current?.readyState === WebSocket.OPEN) {
-        ws.current.send(JSON.stringify({ type: "transcript", word: cleanText, timestamp: Date.now() }));
+        ws.current.send(JSON.stringify({ 
+          type: "transcript", 
+          word: cleanText, 
+          timestamp: Date.now() 
+        }));
       }
     }
   };
 
-  // --- Improved Audio Recording with better error handling ---
-  const initAudioRecording = async () => {
+  // --- Audio Recording ---
+  const startAudioRecording = async () => {
     try {
-      // Clean up any existing streams first
-      if (audioStream) {
-        audioStream.getTracks().forEach(track => {
-          track.stop();
-          track.enabled = false;
-        });
-        setAudioStream(null);
+      // Stop any existing recording first
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
       }
 
-      console.log("🎙️ Requesting microphone access...");
-      
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: { 
           echoCancellation: true, 
           noiseSuppression: true, 
           sampleRate: 16000, 
-          channelCount: 1,
-          autoGainControl: true
-        }
+          channelCount: 1 
+        } 
       });
-      
-      console.log("✅ Microphone access granted");
 
       const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      const chunks = [];
+      audioChunksRef.current = [];
 
       recorder.ondataavailable = (event) => { 
-        if (event.data.size > 0) chunks.push(event.data); 
-      };
-      
-      recorder.onstop = async () => {
-        try {
-          const audioBlob = new Blob(chunks, { type: 'audio/webm' });
-          if (audioBlob.size > 0) {
-            await sendAudioToBackendREST(audioBlob);
-          }
-        } catch (error) {
-          console.error("Error processing audio:", error);
-        } finally {
-          // Always clean up stream
-          stream.getTracks().forEach(track => {
-            track.stop();
-            track.enabled = false;
-          });
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
         }
       };
 
-      // Handle recorder errors
-      recorder.onerror = (event) => {
-        console.error("MediaRecorder error:", event);
-        setMicError('Audio recording error occurred');
+      recorder.onstop = async () => {
+        console.log("📦 Audio chunks collected:", audioChunksRef.current.length);
+        
+        if (audioChunksRef.current.length > 0) {
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          console.log("📤 Sending audio blob:", audioBlob.size, "bytes");
+          await sendAudioToBackendREST(audioBlob);
+        }
+        
+        // Cleanup stream
+        stream.getTracks().forEach(track => track.stop());
+        audioChunksRef.current = [];
       };
 
+      recorder.start(1000); // Collect data every second
       setMediaRecorder(recorder);
-      setAudioStream(stream);
-      return recorder;
+      console.log("🎙️ MediaRecorder started");
       
     } catch (error) { 
-      console.error('❌ Microphone access failed:', error);
-      setMicError('Microphone access denied. Please check permissions and try again.');
-      throw error; // Re-throw to handle in calling function
-    }
-  };
-
-  const startAudioRecording = async () => {
-    if (mediaRecorder?.state === 'recording') {
-      console.log("⚠️ Audio recording already in progress");
-      return;
-    }
-    
-    try {
-      const recorder = mediaRecorder || await initAudioRecording();
-      if (recorder && recorder.state === 'inactive') {
-        recorder.start(1000);
-        console.log("🔴 Audio recording started");
-      }
-    } catch (error) {
-      console.error("❌ Failed to start audio recording:", error);
-      throw error;
+      console.error('❌ Audio recording init error:', error); 
     }
   };
 
   const stopAudioRecording = () => {
-    if (mediaRecorder?.state === 'recording') {
-      console.log("🛑 Stopping audio recording...");
-      mediaRecorder.stop();
-    }
-    
-    // Clean up resources
-    if (audioStream) {
-      audioStream.getTracks().forEach(track => {
-        track.stop();
-        track.enabled = false;
-      });
-      setAudioStream(null);
-    }
-    setMediaRecorder(null);
+    return new Promise((resolve) => {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.onstop = async (event) => {
+          console.log("📦 Audio chunks collected:", audioChunksRef.current.length);
+          
+          if (audioChunksRef.current.length > 0) {
+            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+            console.log("📤 Sending audio blob:", audioBlob.size, "bytes");
+            await sendAudioToBackendREST(audioBlob);
+          }
+          
+          // Cleanup
+          if (mediaRecorder.stream) {
+            mediaRecorder.stream.getTracks().forEach(track => track.stop());
+          }
+          audioChunksRef.current = [];
+          setMediaRecorder(null);
+          resolve();
+        };
+        
+        mediaRecorder.stop();
+      } else {
+        resolve();
+      }
+    });
   };
 
   const sendAudioToBackendREST = async (audioBlob) => {
-    console.log("📤 Sending audio to backend for processing");
+    console.log("📡 Sending audio to backend for processing...");
+
     try {
       const formData = new FormData();
       formData.append('audio', audioBlob, `magic_audio_${Date.now()}.webm`);
       formData.append('sessionId', sessionId);
-      await axios.post(`${BASE_URL}/upload-audio`, formData, { 
+      
+      const response = await axios.post(`${BASE_URL}/upload-audio`, formData, { 
         headers: { 'Content-Type': 'multipart/form-data' }, 
         timeout: 300000 
       });
-      console.log("✅ Audio sent successfully");
+      
+      console.log("✅ Audio uploaded successfully:", response.data);
     } catch (err) { 
       console.error('❌ Audio upload error:', err); 
     }
   };
 
-  // --- Auto-mic on both joined ---
+  // --- Auto-start mic when both users join ---
   useEffect(() => {
     if (!ws.current || role !== 'magician') return;
     
     const handleReady = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === "ready" && !listening && !isMagicActive) {
-          console.log("🎯 Starting speech recognition (ready signal)");
+        if (data.type === "ready" && !listening) {
+          console.log("👥 Both users joined - Auto-starting microphone");
           startListening();
         }
       } catch (err) { 
-        console.error("WebSocket message error:", err); 
+        console.error(err); 
       }
     };
     
@@ -363,96 +329,124 @@ function App() {
         ws.current.removeEventListener("message", handleReady);
       }
     };
-  }, [role, ws, listening, isMagicActive, startListening]);
+  }, [role, ws, listening, startListening]);
 
-  // --- Logout ---
   const handleLogout = () => {
     if (!window.confirm("Are you sure you want to logout?")) return;
     
-    // Clean up resources
-    stopAudioRecording();
+    // Cleanup before logout
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+    }
     stopListening();
     
     window.sessionStorage.clear();
     window.location.reload();
   };
 
-  // --- Spectator Link ---
   const getSpectatorLink = () => `${window.location.origin}${window.location.pathname}?role=spectator&session=${sessionId}`;
 
-  // --- Before unload cleanup ---
-  useEffect(() => {
-    const handleUnload = () => {
-      stopAudioRecording();
+  // --- Manual Start/Stop Handler ---
+  const handleManualMicToggle = async () => {
+    if (listening) {
+      // If magic is active, finalize the session (stops recording + mic)
+      if (isMagicActive) {
+        await finalizeMagicSession();
+      }
+      // Stop mic
       stopListening();
-    };
-    
-    window.addEventListener('beforeunload', handleUnload);
-    return () => window.removeEventListener('beforeunload', handleUnload);
-  }, []);
+    } else {
+      // Start mic
+      startListening();
+    }
+  };
 
   // --- Render ---
   if (!role) return <LoginPage />;
-  if (!browserSupportsSpeechRecognition) return <div className="container center"><h1>Browser does not support speech recognition</h1></div>;
+  if (!browserSupportsSpeechRecognition) {
+    return (
+      <div className="container center">
+        <h1>❌ Browser does not support speech recognition</h1>
+        <p>Please use Chrome, Edge, or Safari</p>
+      </div>
+    );
+  }
 
   if (role === 'magician') {
     const storedUser = JSON.parse(window.sessionStorage.getItem("user"));
-    if (!storedUser) return <LoginPage />;
+    if (!storedUser) {
+      return <LoginPage />;
+    }
 
     return (
       <div className="container magician-view">
         <div className="header">
           <button className='logoutBtn' onClick={handleLogout}>Logout</button>
-          <h1>Magic Session</h1>
-          <div className={`connection-status ${connectionStatus}`}>Status: {connectionStatus}</div>
-        </div>
-
-        {micError && (
-          <div className="error-message" style={{color: 'red', margin: '10px 0', padding: '10px', border: '1px solid red', borderRadius: '5px'}}>
-            ⚠️ {micError}
+          <h1>🎩 Magic Session</h1>
+          <div className={`connection-status ${connectionStatus}`}>
+            Status: {connectionStatus}
           </div>
-        )}
+        </div>
 
         <div className='keyword_container'>
           <div>
             <label>Start Keyword:</label>
-            <input type="text" value={startKeyword} onChange={e => setStartKeyword(e.target.value)} disabled={listening || isMagicActive} />
+            <input 
+              type="text" 
+              value={startKeyword} 
+              onChange={e => setStartKeyword(e.target.value)} 
+              disabled={listening} 
+            />
           </div>
           <div>
             <label>End Keyword:</label>
-            <input type="text" value={endKeyword} onChange={e => setEndKeyword(e.target.value)} disabled={listening || isMagicActive} />
+            <input 
+              type="text" 
+              value={endKeyword} 
+              onChange={e => setEndKeyword(e.target.value)} 
+              disabled={listening} 
+            />
           </div>
         </div>
 
         <div className="recording-controls">
           <button
-            onClick={async () => {
-              if (isMagicActive) {
-                await finalizeMagicSession();
-              } else {
-                stopListening();
-              }
-            }}
+            onClick={handleManualMicToggle}
             className={`control-button ${listening ? 'stop-button' : 'start-button'}`}
-            disabled={isProcessingRef.current}
           >
-            🎤 {listening ? 'Stop Listening' : 'Start Listening'}
-            {isProcessingRef.current && ' (Processing...)'}
+            🎤 {listening ? 'Stop Microphone' : 'Start Microphone'}
           </button>
         </div>
 
         {listening && (
-          <div className="listening-status">
+          <div className="status-indicator">
             {isMagicActive ? (
-              <span style={{ fontWeight: 'bold', color: 'green' }}>🔴 Magic Active - Recording</span>
+              <span style={{ fontWeight: 'bold', color: 'red', fontSize: '18px' }}>
+                🔴 MAGIC ACTIVE - Recording in Progress
+              </span>
             ) : (
-              <span style={{ color: 'blue' }}>👂 Listening for keywords...</span>
+              <span style={{ color: 'blue', fontSize: '16px' }}>
+                👂 Listening for keywords: "{startKeyword}"
+              </span>
             )}
+          </div>
+        )}
+
+        {listening && (
+          <div className="listening-status">
             <h3>You're saying:</h3>
-            <div className="current-transcript">{transcript || "Waiting for speech..."}</div>
+            <div className="current-transcript">
+              {transcript || "Waiting for speech..."}
+            </div>
             {isMagicActive && (
               <div className="audio-recording-indicator">
-                🔴 Audio Recording Active - Say "{endKeyword}" to stop
+                🎙️ Audio Recording Active - Say "{endKeyword}" to stop
+              </div>
+            )}
+            {isMagicActive && magicSpeech && (
+              <div className="magic-speech-display">
+                <h4>Magic Speech Captured:</h4>
+                <p>{magicSpeech}</p>
               </div>
             )}
           </div>
@@ -462,24 +456,21 @@ function App() {
           <p>Ask the spectator to scan this QR code or go to this link:</p>
           <div className="link-container">
             <input type="text" value={getSpectatorLink()} readOnly />
-            <button onClick={() => { 
-              navigator.clipboard.writeText(getSpectatorLink()); 
-              setIsCopied(true); 
-              setTimeout(() => setIsCopied(false), 2000); 
-            }} className="copy-button">
-              {isCopied ? '📋 Copied!' : "Copy Link"}
+            <button 
+              onClick={() => { 
+                navigator.clipboard.writeText(getSpectatorLink()); 
+                setIsCopied(true); 
+                setTimeout(() => setIsCopied(false), 2000); 
+              }} 
+              className="copy-button"
+            >
+              {isCopied ? '✅ Copied' : "📋 Copy"}
             </button>
           </div>
-          <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(getSpectatorLink())}`} alt="Spectator QR Code" />
-        </div>
-
-        {/* Debug info */}
-        <div style={{ marginTop: '20px', fontSize: '12px', color: '#666', background: '#f5f5f5', padding: '10px', borderRadius: '5px' }}>
-          <p><strong>Debug Info:</strong></p>
-          <p>Listening: {listening ? '✅ Yes' : '❌ No'}</p>
-          <p>Magic Active: {isMagicActive ? '✅ Yes' : '❌ No'}</p>
-          <p>Processing: {isProcessingRef.current ? '✅ Yes' : '❌ No'}</p>
-          <p>Audio Stream: {audioStream ? '✅ Active' : '❌ Inactive'}</p>
+          <img 
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(getSpectatorLink())}`} 
+            alt="Spectator QR Code" 
+          />
         </div>
       </div>
     );
@@ -489,12 +480,18 @@ function App() {
     return (
       <div className="container center spectator-view">
         <div className="header">
-          <h1>Magic Session</h1>
-          <div className={`connection-status ${connectionStatus}`}>Status: {connectionStatus}</div>
+          <h1>🎭 Magic Session</h1>
+          <div className={`connection-status ${connectionStatus}`}>
+            Status: {connectionStatus}
+          </div>
         </div>
 
         <div className="transcript-box">
-          {transcript ? <h2>"{transcript}"</h2> : <p>Waiting for the magician to speak...</p>}
+          {transcript ? (
+            <h2>"{transcript}"</h2>
+          ) : (
+            <p>Waiting for the magician to speak...</p>
+          )}
         </div>
       </div>
     );
