@@ -156,6 +156,23 @@ function App() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!role || role !== 'magician') return;
+
+    const handleEnd = () => {
+      if (isListening) {
+        console.log("Restarting recognition (mobile fix)...");
+        SpeechRecognition.startListening({ continuous: true, language: 'en-US' });
+      }
+    };
+
+    SpeechRecognition.onend = handleEnd;
+
+    return () => {
+      SpeechRecognition.onend = null;
+    };
+  }, [isListening, role]);
+
   // Initialize audio recording
   const initAudioRecording = async () => {
     try {
