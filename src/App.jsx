@@ -522,8 +522,8 @@ const useWebSocket = (sessionId, role, callbacks = {}) => {
   useEffect(() => {
     if (sessionId && role) {
       const connect = () => {
-        // const wsUrl = "wss://magix-trix.onrender.com"
-        const wsUrl = "ws://localhost:3001";
+        const wsUrl = "wss://magix-trix.onrender.com"
+        // const wsUrl = "ws://localhost:3001";
 
         ws.current = new WebSocket(wsUrl);
 
@@ -618,8 +618,8 @@ function App() {
   const streamRef = useRef(null);
   const chunkCounterRef = useRef(0);
 
-  // const BASE_URL = 'https://magix-trix.onrender.com/api';
-  const BASE_URL = 'http://localhost:3001/api';
+  const BASE_URL = 'https://magix-trix.onrender.com/api';
+  // const BASE_URL = 'http://localhost:3001/api';
 
   // WebSocket callbacks for keyword detection
   const wsCallbacks = {
