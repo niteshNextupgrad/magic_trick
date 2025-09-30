@@ -252,6 +252,12 @@ function App() {
   if (!browserSupportsSpeechRecognition) return <div className="container center"><h1>Browser does not support speech recognition</h1></div>;
 
   if (role === 'magician') {
+    const storedUser = JSON.parse(window.sessionStorage.getItem("user"));
+    if (!storedUser) {
+      return <LoginPage />;
+    }
+
+
     return (
       <div className="container magician-view">
         <div className="header">
