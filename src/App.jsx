@@ -155,10 +155,10 @@
 //     setFullSpeech('');
 //     audioChunksRef.current = [];
 //     setAudioChunks([]);
-
+    
 //     console.log("🎬 Magic Recording started!");
 //     await startAudioRecording();
-
+    
 //     isProcessingRef.current = false;
 //   };
 
@@ -167,7 +167,7 @@
 //     isProcessingRef.current = true;
 
 //     console.log("🛑 Magic Recording stopped!");
-
+    
 //     magicActiveRef.current = false;
 //     setIsMagicActive(false);
 
@@ -239,13 +239,13 @@
 
 //       recorder.onstop = async () => {
 //         console.log("📦 Audio chunks collected:", audioChunksRef.current.length);
-
+        
 //         if (audioChunksRef.current.length > 0) {
 //           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
 //           console.log("📤 Sending audio blob:", audioBlob.size, "bytes");
 //           await sendAudioToBackendREST(audioBlob);
 //         }
-
+        
 //         // Cleanup stream
 //         stream.getTracks().forEach(track => track.stop());
 //         audioChunksRef.current = [];
@@ -254,7 +254,7 @@
 //       recorder.start(1000); // Collect data every second
 //       setMediaRecorder(recorder);
 //       console.log("🎙️ MediaRecorder started");
-
+      
 //     } catch (error) { 
 //       console.error('❌ Audio recording init error:', error); 
 //     }
@@ -265,13 +265,13 @@
 //       if (mediaRecorder && mediaRecorder.state === 'recording') {
 //         mediaRecorder.onstop = async (event) => {
 //           console.log("📦 Audio chunks collected:", audioChunksRef.current.length);
-
+          
 //           if (audioChunksRef.current.length > 0) {
 //             const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
 //             console.log("📤 Sending audio blob:", audioBlob.size, "bytes");
 //             await sendAudioToBackendREST(audioBlob);
 //           }
-
+          
 //           // Cleanup
 //           if (mediaRecorder.stream) {
 //             mediaRecorder.stream.getTracks().forEach(track => track.stop());
@@ -280,7 +280,7 @@
 //           setMediaRecorder(null);
 //           resolve();
 //         };
-
+        
 //         mediaRecorder.stop();
 //       } else {
 //         resolve();
@@ -295,12 +295,12 @@
 //       const formData = new FormData();
 //       formData.append('audio', audioBlob, `magic_audio_${Date.now()}.webm`);
 //       formData.append('sessionId', sessionId);
-
+      
 //       const response = await axios.post(`${BASE_URL}/upload-audio`, formData, { 
 //         headers: { 'Content-Type': 'multipart/form-data' }, 
 //         timeout: 300000 
 //       });
-
+      
 //       console.log("✅ Audio uploaded successfully:", response.data);
 //     } catch (err) { 
 //       console.error('❌ Audio upload error:', err); 
@@ -310,7 +310,7 @@
 //   // --- Auto-start mic when both users join ---
 //   useEffect(() => {
 //     if (!ws.current || role !== 'magician') return;
-
+    
 //     const handleReady = (event) => {
 //       try {
 //         const data = JSON.parse(event.data);
@@ -322,7 +322,7 @@
 //         console.error(err); 
 //       }
 //     };
-
+    
 //     ws.current.addEventListener("message", handleReady);
 //     return () => {
 //       if (ws.current) {
@@ -333,13 +333,13 @@
 
 //   const handleLogout = () => {
 //     if (!window.confirm("Are you sure you want to logout?")) return;
-
+    
 //     // Cleanup before logout
 //     if (mediaRecorder && mediaRecorder.state === 'recording') {
 //       mediaRecorder.stop();
 //     }
 //     stopListening();
-
+    
 //     window.sessionStorage.clear();
 //     window.location.reload();
 //   };
@@ -689,10 +689,10 @@ function App() {
 
     if (containsStart && !magicActiveRef.current) {
       handleStartMagic();
-    }
+    } 
     else if (containsEnd && magicActiveRef.current) {
       finalizeMagicSession();
-    }
+    } 
     else if (magicActiveRef.current) {
       handleMagicSpeech(speechTranscript);
     }
@@ -708,14 +708,14 @@ function App() {
     setMagicSpeech('');
     setFullSpeech('');
     audioChunksRef.current = [];
-
+    
     console.log("🎬 Magic Recording started!");
-
+    
     // On mobile, audio recording already running, just mark as magic active
     if (!isMobile) {
       await startAudioRecording();
     }
-
+    
     isProcessingRef.current = false;
   };
 
@@ -724,7 +724,7 @@ function App() {
     isProcessingRef.current = true;
 
     console.log("🛑 Magic Recording stopped!");
-
+    
     magicActiveRef.current = false;
     setIsMagicActive(false);
 
@@ -759,10 +759,10 @@ function App() {
       setTranscript(cleanText);
 
       if (ws.current?.readyState === WebSocket.OPEN) {
-        ws.current.send(JSON.stringify({
-          type: "transcript",
-          word: cleanText,
-          timestamp: Date.now()
+        ws.current.send(JSON.stringify({ 
+          type: "transcript", 
+          word: cleanText, 
+          timestamp: Date.now() 
         }));
       }
     }
@@ -777,14 +777,14 @@ function App() {
       }
 
       console.log("🎙️ Requesting microphone access...");
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: { 
+          echoCancellation: true, 
+          noiseSuppression: true, 
           autoGainControl: true,
-          sampleRate: 16000,
-          channelCount: 1
-        }
+          sampleRate: 16000, 
+          channelCount: 1 
+        } 
       });
 
       streamRef.current = stream;
@@ -793,7 +793,7 @@ function App() {
       const recorder = new MediaRecorder(stream, { mimeType });
       audioChunksRef.current = [];
 
-      recorder.ondataavailable = (event) => {
+      recorder.ondataavailable = (event) => { 
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
@@ -804,7 +804,7 @@ function App() {
           const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
           await sendAudioToBackend(audioBlob);
         }
-
+        
         if (streamRef.current) {
           streamRef.current.getTracks().forEach(track => track.stop());
           streamRef.current = null;
@@ -815,8 +815,8 @@ function App() {
       recorder.start(1000);
       setMediaRecorder(recorder);
       console.log("✅ MediaRecorder started");
-
-    } catch (error) {
+      
+    } catch (error) { 
       console.error('❌ Audio recording error:', error);
       alert(`Microphone error: ${error.message}`);
     }
@@ -831,17 +831,17 @@ function App() {
             const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
             await sendAudioToBackend(audioBlob);
           }
-
+          
           if (streamRef.current) {
             streamRef.current.getTracks().forEach(track => track.stop());
             streamRef.current = null;
           }
-
+          
           audioChunksRef.current = [];
           setMediaRecorder(null);
           resolve();
         };
-
+        
         mediaRecorder.stop();
       } else {
         resolve();
@@ -853,32 +853,32 @@ function App() {
   const startMobileKeywordListening = async () => {
     try {
       console.log("🎙️ Starting mobile keyword listening...");
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
+      
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: { 
+          echoCancellation: true, 
+          noiseSuppression: true, 
           autoGainControl: true,
-          sampleRate: 16000,
-          channelCount: 1
-        }
+          sampleRate: 16000, 
+          channelCount: 1 
+        } 
       });
 
       streamRef.current = stream;
       setIsListeningForKeywords(true);
 
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' :
-        MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' :
-          'audio/mp4';
-
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 
+                       MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' :
+                       'audio/mp4';
+      
       const recorder = new MediaRecorder(stream, { mimeType });
       chunkCounterRef.current = 0;
 
-      recorder.ondataavailable = async (event) => {
+      recorder.ondataavailable = async (event) => { 
         if (event.data.size > 0) {
           chunkCounterRef.current++;
           console.log(`📦 Chunk ${chunkCounterRef.current}:`, event.data.size, "bytes");
-
+          
           // Send chunk to backend for real-time transcription
           await sendAudioChunkForKeywordDetection(event.data, chunkCounterRef.current);
         }
@@ -897,8 +897,8 @@ function App() {
       recorder.start(2000);
       setMediaRecorder(recorder);
       console.log("✅ Mobile continuous recording started");
-
-    } catch (error) {
+      
+    } catch (error) { 
       console.error('❌ Mobile recording error:', error);
       alert(`Microphone error: ${error.message}\nPlease allow microphone access.`);
     }
@@ -926,14 +926,14 @@ function App() {
       formData.append('endKeyword', endKeyword);
       formData.append('isMagicActive', magicActiveRef.current);
       formData.append('chunkNumber', chunkNumber);
-
+      
       // Non-blocking request
-      axios.post(`${BASE_URL}/process-audio-chunk`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 10000
+      axios.post(`${BASE_URL}/process-audio-chunk`, formData, { 
+        headers: { 'Content-Type': 'multipart/form-data' }, 
+        timeout: 10000 
       }).catch(err => console.error('Chunk upload error:', err));
-
-    } catch (err) {
+      
+    } catch (err) { 
       console.error('❌ Chunk send error:', err);
     }
   };
@@ -943,14 +943,14 @@ function App() {
       const formData = new FormData();
       formData.append('audio', audioBlob, `magic_audio_${Date.now()}.webm`);
       formData.append('sessionId', sessionId);
-
-      await axios.post(`${BASE_URL}/upload-audio`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 300000
+      
+      await axios.post(`${BASE_URL}/upload-audio`, formData, { 
+        headers: { 'Content-Type': 'multipart/form-data' }, 
+        timeout: 300000 
       });
-
+      
       console.log("✅ Audio uploaded");
-    } catch (err) {
+    } catch (err) { 
       console.error('❌ Audio upload error:', err);
     }
   };
@@ -958,7 +958,7 @@ function App() {
   // --- Auto-start for desktop ---
   useEffect(() => {
     if (isMobile || !ws.current || role !== 'magician') return;
-
+    
     const handleReady = (event) => {
       try {
         const data = JSON.parse(event.data);
@@ -966,11 +966,11 @@ function App() {
           console.log("👥 Both users joined - Auto-starting microphone");
           startListening();
         }
-      } catch (err) {
-        console.error(err);
+      } catch (err) { 
+        console.error(err); 
       }
     };
-
+    
     ws.current.addEventListener("message", handleReady);
     return () => {
       if (ws.current) {
@@ -981,7 +981,7 @@ function App() {
 
   const handleLogout = () => {
     if (!window.confirm("Are you sure you want to logout?")) return;
-
+    
     if (mediaRecorder && mediaRecorder.state === 'recording') {
       mediaRecorder.stop();
     }
@@ -991,7 +991,7 @@ function App() {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
     }
-
+    
     window.sessionStorage.clear();
     window.location.reload();
   };
@@ -1021,7 +1021,7 @@ function App() {
 
   // --- Render ---
   if (!role) return <LoginPage />;
-
+  
   if (!isMobile && !browserSupportsSpeechRecognition) {
     return (
       <div className="container center">
@@ -1050,45 +1050,55 @@ function App() {
         <div className='keyword_container'>
           <div>
             <label>Start Keyword:</label>
-            <input
-              type="text"
-              value={startKeyword}
-              onChange={e => setStartKeyword(e.target.value)}
-              disabled={isMobile ? isListeningForKeywords : listening}
+            <input 
+              type="text" 
+              value={startKeyword} 
+              onChange={e => setStartKeyword(e.target.value)} 
+              disabled={isMobile ? isListeningForKeywords : listening} 
             />
           </div>
           <div>
             <label>End Keyword:</label>
-            <input
-              type="text"
-              value={endKeyword}
-              onChange={e => setEndKeyword(e.target.value)}
-              disabled={isMobile ? isListeningForKeywords : listening}
+            <input 
+              type="text" 
+              value={endKeyword} 
+              onChange={e => setEndKeyword(e.target.value)} 
+              disabled={isMobile ? isListeningForKeywords : listening} 
             />
           </div>
         </div>
 
         <div className="recording-controls">
-          <button
-            onClick={handleDesktopMicToggle}
-            className={`control-button ${listening ? 'stop-button' : 'start-button'}`}
-          >
-            🎤 {listening ? 'Stop Microphone' : 'Start Microphone'}
-          </button>
+          {isMobile ? (
+            <button
+              onClick={handleMobileListeningToggle}
+              className={`control-button ${isListeningForKeywords ? 'stop-button' : 'start-button'}`}
+              style={{ fontSize: '18px', padding: '20px 40px' }}
+            >
+              {isListeningForKeywords ? '⏹️ Stop Listening' : '🎤 Start Listening for Keywords'}
+            </button>
+          ) : (
+            <button
+              onClick={handleDesktopMicToggle}
+              className={`control-button ${listening ? 'stop-button' : 'start-button'}`}
+            >
+              🎤 {listening ? 'Stop Microphone' : 'Start Microphone'}
+            </button>
+          )}
         </div>
 
         {isMobile && (
-          <div className="mobile-info" style={{
-            background: isListeningForKeywords ? '#d4edda' : '#fff3cd',
-            padding: '15px',
-            borderRadius: '8px',
+          <div className="mobile-info" style={{ 
+            background: isListeningForKeywords ? '#d4edda' : '#fff3cd', 
+            padding: '15px', 
+            borderRadius: '8px', 
             margin: '20px 0',
             border: `1px solid ${isListeningForKeywords ? '#28a745' : '#ffc107'}`
           }}>
             <p style={{ margin: 0, fontSize: '14px' }}>
               {isListeningForKeywords ? (
                 <>
-                  <strong>👂 Listening for: "{startKeyword}"</strong><br />
+                  <strong>👂 Listening for: "{startKeyword}"</strong><br/>
                   {isMagicActive && <span style={{ color: 'red', fontWeight: 'bold' }}>🔴 MAGIC ACTIVE - Say "{endKeyword}" to stop</span>}
                 </>
               ) : (
@@ -1131,20 +1141,20 @@ function App() {
           <p>Ask the spectator to scan this QR code or go to this link:</p>
           <div className="link-container">
             <input type="text" value={getSpectatorLink()} readOnly />
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(getSpectatorLink());
-                setIsCopied(true);
-                setTimeout(() => setIsCopied(false), 2000);
-              }}
+            <button 
+              onClick={() => { 
+                navigator.clipboard.writeText(getSpectatorLink()); 
+                setIsCopied(true); 
+                setTimeout(() => setIsCopied(false), 2000); 
+              }} 
               className="copy-button"
             >
               {isCopied ? '✅ Copied' : "📋 Copy"}
             </button>
           </div>
-          <img
-            src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(getSpectatorLink())}`}
-            alt="Spectator QR Code"
+          <img 
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(getSpectatorLink())}`} 
+            alt="Spectator QR Code" 
           />
         </div>
       </div>
