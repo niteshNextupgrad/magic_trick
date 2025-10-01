@@ -1,3 +1,4 @@
+// src/hooks/useSpeechToText.js
 import { useState, useEffect, useRef, useCallback } from "react";
 
 export const useSpeechToText = (lang = "en-US") => {
@@ -14,7 +15,7 @@ export const useSpeechToText = (lang = "en-US") => {
       window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      console.error("❌ Speech Recognition not supported in this browser");
+      console.error("Speech Recognition not supported in this browser");
       setSupported(false);
       return;
     }
@@ -48,19 +49,19 @@ export const useSpeechToText = (lang = "en-US") => {
 
     // Handle recognition start
     recognition.onstart = () => {
-      console.log("🎤 Speech Recognition Started");
+      console.log("Speech Recognition Started");
       setListening(true);
       isManualStopRef.current = false;
     };
 
     // Handle recognition end
     recognition.onend = () => {
-      console.log("🛑 Speech Recognition Ended");
+      console.log("Speech Recognition Ended");
       setListening(false);
 
       // Auto-restart if not manually stopped
       if (!isManualStopRef.current) {
-        console.log("🔄 Auto-restarting speech recognition...");
+        console.log("Auto-restarting speech recognition...");
         // Small delay before restart to prevent rapid fire restarts
         restartTimeoutRef.current = setTimeout(() => {
           try {
@@ -68,7 +69,7 @@ export const useSpeechToText = (lang = "en-US") => {
               recognitionRef.current.start();
             }
           } catch (error) {
-            console.error("❌ Auto-restart error:", error);
+            console.error("Auto-restart error:", error);
           }
         }, 100);
       }
