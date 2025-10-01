@@ -316,7 +316,7 @@ function App() {
       };
 
       recorder.onstop = () => console.log("🛑 Mobile recording stopped");
-      recorder.start(2000);
+      recorder.start(3000);
       setMediaRecorder(recorder);
 
     } catch (err) { console.error(err); alert('Microphone error: ' + err.message); }
@@ -346,7 +346,7 @@ function App() {
   };
 
   const sendAudioToBackend = async (audioBlob) => {
-    console.log("Sending audio blog to backend..");
+    console.log("Sending audio blob to backend..");
     
     try {
       const formData = new FormData();
