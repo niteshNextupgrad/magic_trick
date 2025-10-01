@@ -1,145 +1,159 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
+import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 import LoginPage from './Login';
 import axios from 'axios';
-import { useSpeechToText } from './hooks/useSpeechToText';
 
-// --- Detect Mobile ---
-const isMobileDevice = () => {
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-};
-
-// --- WebSocket Hook ---
-const useWebSocket = (sessionId, role, callbacks = {}) => {
+// WebSocket connection hook (keep your existing WebSocket code)
+const useWebSocket = (sessionId, role) => {
   const ws = useRef(null);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const reconnectInterval = useRef(null);
 
   useEffect(() => {
-    if (!sessionId || !role) return;
+    if (sessionId && role) {
+      const connect = () => {
+        console.log('Attempting WebSocket connection...');
+        // const wsUrl = "ws://localhost:3001"
+        const wsUrl = "wss://magix-trix.onrender.com"
+        ws.current = new WebSocket(wsUrl);
 
-    const connect = () => {
-      // const wsUrl = "ws://localhost:3001";
-      const wsUrl = "wss://magix-trix.onrender.com"; 
-      ws.current = new WebSocket(wsUrl);
+        ws.current.onopen = () => {
+          console.log('WebSocket Connected');
+          setConnectionStatus('connected');
 
-      ws.current.onopen = () => {
-        setConnectionStatus('connected');
-        if (reconnectInterval.current) {
-          clearInterval(reconnectInterval.current);
-          reconnectInterval.current = null;
-        }
-        ws.current.send(JSON.stringify({ type: 'join', sessionId, role }));
-      };
-
-      ws.current.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-
-          if (data.type === 'joined') console.log("Joined:", data.sessionId);
-
-          if (role === 'magician') {
-            if (data.type === 'keyword_detected') {
-              if (data.keyword === 'start' && callbacks.onStartKeyword) callbacks.onStartKeyword();
-              if (data.keyword === 'end' && callbacks.onEndKeyword) callbacks.onEndKeyword();
-            }
-            if (data.type === 'transcript' && callbacks.onTranscript) callbacks.onTranscript(data.text);
-            if (data.type === 'summarize_complete' && data.topic?.length > 0 && navigator.vibrate) {
-              navigator.vibrate([1000, 200, 1000, 200, 1000]);
-            }
+          // Clear reconnect loop if connected
+          if (reconnectInterval.current) {
+            clearInterval(reconnectInterval.current);
+            reconnectInterval.current = null;
           }
 
-          if (role === 'spectator' && data.type === 'summary' && data.topic?.length > 0) {
-            window.location.href = `https://www.google.com/search?q=${data.topic || data.summary}`;
+          ws.current.send(JSON.stringify({ type: 'join', sessionId, role }));
+        };
+
+        ws.current.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+
+            if (data.type === 'joined') {
+              console.log("Successfully joined session:", data.sessionId);
+            }
+
+            // Magician receives completion confirmation - can trigger vibration
+            if (data.type === 'summarize_complete' && role === 'magician') {
+              console.log("AI processing complete, topics:", data.topic);
+
+              // Vibrate magician's device when processing is complete
+              if (data.topic && data.topic.length > 0 && navigator.vibrate) {
+                navigator.vibrate([1000, 200, 1000, 200, 1000]);
+              } else if (navigator.vibrate) {
+                navigator.vibrate([100, 200, 100]);
+              }
+            }
+
+            // Handle summary response - spectator gets redirected to Google search
+            if (data.type === 'summary' && role === 'spectator') {
+              console.log("Summary Data received:", data);
+              if (data.topic && data.topic.length > 0) {
+                window.location.href = `https://www.google.com/search?q=${data.topic || data.summary}`;
+              } else {
+                console.log("Couldn't identify a clear topic. Please try again.");
+              }
+            }
+
+          } catch (error) {
+            console.error("Error parsing message:", error, event.data);
           }
+        };
 
-        } catch (error) {
-          console.error("WS parse error:", error, event.data);
-        }
+        ws.current.onclose = () => {
+          console.log('WebSocket Disconnected');
+          setConnectionStatus('disconnected');
+
+          // Prevent multiple reconnect loops
+          if (!reconnectInterval.current) {
+            reconnectInterval.current = setInterval(() => {
+              console.log("Attempting reconnect...");
+              connect();
+            }, 3000);
+          }
+        };
+
+        ws.current.onerror = (error) => {
+          console.error('WebSocket error:', error);
+          setConnectionStatus('error');
+        };
       };
 
-      ws.current.onclose = () => {
-        setConnectionStatus('disconnected');
-        if (!reconnectInterval.current) reconnectInterval.current = setInterval(connect, 3000);
-      };
+      connect();
 
-      ws.current.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        setConnectionStatus('error');
+      return () => {
+        clearInterval(reconnectInterval.current);
+        if (ws.current) ws.current.close();
       };
-    };
-
-    connect();
-    return () => {
-      clearInterval(reconnectInterval.current);
-      if (ws.current && ws.current.readyState !== WebSocket.CLOSED) ws.current.close();
-    };
+    }
   }, [sessionId, role]);
 
   return { ws, connectionStatus };
 };
 
-// --- App ---
 function App() {
   const [role, setRole] = useState(null);
   const [sessionId, setSessionId] = useState('');
   const [transcript, setTranscript] = useState('');
   const [fullSpeech, setFullSpeech] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const [browserSupportsSpeech, setBrowserSupportsSpeech] = useState(true);
   const [isMagicActive, setIsMagicActive] = useState(false);
   const [magicSpeech, setMagicSpeech] = useState('');
-  const [isCopied, setIsCopied] = useState(false);
-  const [startKeyword, setStartKeyword] = useState("start magic");
-  const [endKeyword, setEndKeyword] = useState("stop magic");
+  const [isCopied, setIsCopied] = useState(false)
+  const [startKeyword, setStartKeyword] = useState("start magic")
+  const [endKeyword, setEndKeyword] = useState("stop magic")
   const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [audioStream, setAudioStream] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
-  const [isListeningForKeywords, setIsListeningForKeywords] = useState(false);
 
+  // Refs to prevent re-render issues
   const isProcessingRef = useRef(false);
   const magicActiveRef = useRef(false);
-  const audioChunksRef = useRef([]);
-  const streamRef = useRef(null);
-  const chunkCounterRef = useRef(0);
+  const speechBufferRef = useRef('');
 
-  const BASE_URL = 'https://magix-trix.onrender.com/api';
-  // const BASE_URL = 'http://localhost:3001/api';
+  const { ws, connectionStatus } = useWebSocket(sessionId, role);
 
-  // --- WebSocket callbacks ---
-  const wsCallbacks = {
-    onStartKeyword: () => {
-      console.log("🎬 Start keyword detected by backend!");
-      if (!magicActiveRef.current) handleStartMagic();
-    },
-    onEndKeyword: () => {
-      console.log("🛑 End keyword detected by backend!");
-      if (magicActiveRef.current) finalizeMagicSession();
-    },
-    onTranscript: (text) => {
-      setTranscript(text);
-      if (magicActiveRef.current) {
-        setMagicSpeech(prev => prev ? prev + ' ' + text : text);
-        setFullSpeech(prev => prev ? prev + ' ' + text : text);
-      }
-    }
+  const BASE_URL = 'https://magix-trix.onrender.com/api'
+  // const BASE_URL = 'http://localhost:3001/api'
+
+  // Detect mobile device
+  useEffect(() => {
+    const checkMobile = () => {
+      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    };
+    setIsMobile(checkMobile());
+  }, []);
+
+  const handleLogout = () => {
+    if (!confirm("Are you sure, want to logout?")) return;
+    window.sessionStorage.clear()
+    window.location.reload()
   };
 
-  const { ws, connectionStatus } = useWebSocket(sessionId, role, wsCallbacks);
-
-  // --- Native Speech Hook (Desktop Only) ---
+  // Use react-speech-recognition hook
   const {
     transcript: speechTranscript,
     listening,
-    supported: browserSupportsSpeechRecognition,
-    startListening,
-    stopListening,
     resetTranscript,
-  } = useSpeechToText("en-US");
+    browserSupportsSpeechRecognition
+  } = useSpeechRecognition();
 
-  // Detect mobile on mount
+  // Update browser support state
   useEffect(() => {
-    setIsMobile(isMobileDevice());
-  }, []);
+    if (!browserSupportsSpeechRecognition) {
+      setBrowserSupportsSpeech(false);
+    }
+  }, [browserSupportsSpeechRecognition]);
 
-  // Parse URL
+  // Parse URL for role/session
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const roleParam = params.get('role');
@@ -149,284 +163,461 @@ function App() {
       setSessionId(sessionParam);
     }
   }, []);
-  // --- Auto-start microphone on join ---
+
+  // Mobile-specific speech recognition handling
   useEffect(() => {
-    if (!ws.current || !role) return;
+    if (!role || role !== 'magician' || !isMobile) return;
 
-    const handleReady = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === "ready") {
-          console.log("Both users joined - Auto-starting microphone");
-
-          if (role === 'magician') {
-            if (isMobile) startMobileKeywordListening();
-            else startListening();
-          }
-        }
-      } catch (err) {
-        console.error(err);
+    const handleEnd = () => {
+      if (isListening && !magicActiveRef.current) {
+        console.log("Restarting recognition for keyword detection...");
+        SpeechRecognition.startListening({ continuous: true, language: 'en-US' });
       }
     };
 
-    ws.current.addEventListener("message", handleReady);
-    return () => {
-      if (ws.current) ws.current.removeEventListener("message", handleReady);
-    };
-  }, [role, ws, isMobile, startListening]);
+    SpeechRecognition.onend = handleEnd;
 
-  // --- Desktop Keyword Detection ---
+    return () => {
+      SpeechRecognition.onend = null;
+    };
+  }, [isListening, role, isMobile]);
+
+  // Initialize audio recording
+  const initAudioRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 16000,
+          channelCount: 1
+        }
+      });
+
+      const recorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm'
+      });
+
+      const chunks = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        try {
+          const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+          console.log('Audio blob created, size:', audioBlob.size);
+
+          if (audioBlob.size > 0) {
+            await sendAudioToBackendREST(audioBlob);
+          }
+        } catch (error) {
+          console.error('Error processing recorded audio:', error);
+        } finally {
+          // Clean up stream
+          if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+          }
+        }
+      };
+
+      setMediaRecorder(recorder);
+      setAudioStream(stream);
+      return recorder;
+    } catch (error) {
+      console.error('Error initializing audio recording:', error);
+      return null;
+    }
+  };
+
+  const startAudioRecording = async () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      console.log('Audio recording already in progress');
+      return;
+    }
+
+    const recorder = await initAudioRecording();
+    if (recorder) {
+      recorder.start(1000);
+      console.log('Audio recording started');
+    }
+  };
+
+  const stopAudioRecording = () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+      console.log('Audio recording stopped');
+      setMediaRecorder(null);
+
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+        setAudioStream(null);
+      }
+    }
+  };
+
+  // Enhanced speech processing with mobile support
   useEffect(() => {
-    if (!speechTranscript || !role || isMobile || role !== 'magician' || isProcessingRef.current) return;
+    if (role !== 'magician' || !speechTranscript || isProcessingRef.current) return;
 
     const lowerText = speechTranscript.toLowerCase();
     const containsStart = lowerText.includes(startKeyword.toLowerCase());
     const containsEnd = lowerText.includes(endKeyword.toLowerCase());
 
-    if (containsStart && containsEnd && magicActiveRef.current) finalizeMagicSession();
-    else if (containsStart && !magicActiveRef.current) handleStartMagic();
-    else if (containsEnd && magicActiveRef.current) finalizeMagicSession();
-    else if (magicActiveRef.current) handleMagicSpeech(speechTranscript);
-  }, [speechTranscript, role, startKeyword, endKeyword, isMobile]);
+    // Prevent simultaneous start/stop processing
+    if (containsStart && containsEnd) {
+      console.log('Both start and end keywords detected, prioritizing stop');
+      if (magicActiveRef.current) {
+        handleStopMagic();
+      }
+      return;
+    }
 
-  // --- Handlers ---
+    if (containsStart && !magicActiveRef.current) {
+      handleStartMagic();
+    } else if (containsEnd && magicActiveRef.current) {
+      handleStopMagic();
+    } else if (magicActiveRef.current) {
+      // Normal speech during magic session
+      handleMagicSpeech(speechTranscript);
+    } else {
+      // On mobile, don't show transcript when not in magic mode to avoid conflicts
+      if (!isMobile) {
+        setTranscript(speechTranscript);
+      }
+    }
+  }, [speechTranscript, role, isMobile]);
+
   const handleStartMagic = async () => {
     if (isProcessingRef.current) return;
+
     isProcessingRef.current = true;
+    console.log("Magic recording started!");
 
     magicActiveRef.current = true;
     setIsMagicActive(true);
     setMagicSpeech('');
     setFullSpeech('');
-    audioChunksRef.current = [];
+    speechBufferRef.current = '';
 
-    if (!isMobile) await startAudioRecording();
+    // On mobile, stop speech recognition and start audio recording only
+    if (isMobile) {
+      SpeechRecognition.stopListening();
+      await startAudioRecording();
+    } else {
+      // On desktop, use both
+      await startAudioRecording();
+    }
+
     isProcessingRef.current = false;
   };
 
-  const finalizeMagicSession = async () => {
+  const handleStopMagic = () => {
     if (isProcessingRef.current) return;
+
     isProcessingRef.current = true;
+    console.log("Magic recording stopped!");
 
     magicActiveRef.current = false;
     setIsMagicActive(false);
 
-    if (isMobile && audioChunksRef.current.length > 0) {
-      const fullAudioBlob = new Blob(audioChunksRef.current, { type: mediaRecorder?.mimeType || 'audio/webm' });
-      await sendAudioToBackend(fullAudioBlob);
-      if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
-      if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-      audioChunksRef.current = [];
-      setMediaRecorder(null);
-      setIsListeningForKeywords(false);
-      chunkCounterRef.current = 0;
-    } else {
-      await stopAudioRecording();
-      resetTranscript();
+    stopAudioRecording();
+
+    // Send full speech for summarization
+    if (fullSpeech.trim() && ws.current?.readyState === WebSocket.OPEN) {
+      ws.current.send(JSON.stringify({
+        type: "summarize",
+        text: fullSpeech,
+        timestamp: Date.now()
+      }));
     }
 
-    if (fullSpeech.trim() && ws.current?.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify({ type: "summarize", text: fullSpeech, timestamp: Date.now() }));
+    // On mobile, restart speech recognition for keyword detection
+    if (isMobile && isListening) {
+      setTimeout(() => {
+        SpeechRecognition.startListening({ continuous: true, language: 'en-US' });
+      }, 500);
     }
 
     isProcessingRef.current = false;
   };
 
   const handleMagicSpeech = (text) => {
-    console.log("Magic record started!");
-    
-    let cleanText = text.replace(new RegExp(startKeyword, 'gi'), '').replace(new RegExp(endKeyword, 'gi'), '').trim();
-    if (!cleanText) return;
+    let cleanText = text
+      .replace(new RegExp(startKeyword, 'gi'), '')
+      .replace(new RegExp(endKeyword, 'gi'), '')
+      .trim();
 
-    const updatedSpeech = magicSpeech ? magicSpeech + ' ' + cleanText : cleanText;
-    setMagicSpeech(updatedSpeech);
-    setFullSpeech(updatedSpeech);
-    setTranscript(cleanText);
+    if (cleanText) {
+      const updatedSpeech = magicSpeech ? magicSpeech + ' ' + cleanText : cleanText;
+      setMagicSpeech(updatedSpeech);
+      setFullSpeech(updatedSpeech);
+      
+      // Show transcript only when magic is active
+      setTranscript(cleanText);
 
-    if (ws.current?.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify({ type: "transcript", word: cleanText, timestamp: Date.now() }));
+      // Send live transcript to spectator
+      if (ws.current?.readyState === WebSocket.OPEN) {
+        ws.current.send(JSON.stringify({
+          type: "transcript",
+          message: cleanText,
+          timestamp: Date.now()
+        }));
+      }
     }
   };
 
-  // --- Audio Recording (Desktop) ---
-  const startAudioRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, sampleRate: 16000, channelCount: 1 } });
-      streamRef.current = stream;
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
-      const recorder = new MediaRecorder(stream, { mimeType });
-      audioChunksRef.current = [];
-
-      recorder.ondataavailable = (event) => { if (event.data.size > 0) audioChunksRef.current.push(event.data); };
-      recorder.onstop = async () => {
-        if (audioChunksRef.current.length > 0) {
-          const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-          await sendAudioToBackend(audioBlob);
-        }
-        streamRef.current.getTracks().forEach(track => track.stop());
-        streamRef.current = null;
-        audioChunksRef.current = [];
-      };
-
-      recorder.start(1000);
-      setMediaRecorder(recorder);
-    } catch (err) {
-      console.error(err);
-      alert('Microphone error: ' + err.message);
-    }
-  };
-
-  const stopAudioRecording = () => new Promise(resolve => {
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
-      mediaRecorder.onstop = async () => {
-        if (audioChunksRef.current.length > 0) {
-          const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType });
-          await sendAudioToBackend(audioBlob);
-        }
-        if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
-        streamRef.current = null;
-        audioChunksRef.current = [];
-        setMediaRecorder(null);
-        resolve();
-      };
-      mediaRecorder.stop();
-    } else resolve();
-  });
-
-  // --- Mobile Recording ---
-  const startMobileKeywordListening = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, sampleRate: 16000, channelCount: 1 } });
-      streamRef.current = stream;
-      setIsListeningForKeywords(true);
-
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' :
-        MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
-      const recorder = new MediaRecorder(stream, { mimeType });
-      audioChunksRef.current = [];
-      chunkCounterRef.current = 0;
-
-      recorder.ondataavailable = async (event) => {
-        if (event.data.size > 0) {
-          chunkCounterRef.current++;
-          audioChunksRef.current.push(event.data);
-          await sendAudioChunkForKeywordDetection(event.data, chunkCounterRef.current);
-        }
-      };
-
-      recorder.onstop = () => console.log("🛑 Mobile recording stopped");
-      recorder.start(3000);
-      setMediaRecorder(recorder);
-
-    } catch (err) { console.error(err); alert('Microphone error: ' + err.message); }
-  };
-
-  const stopMobileKeywordListening = () => {
-    if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
-    if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
-    streamRef.current = null;
-    setIsListeningForKeywords(false);
-    chunkCounterRef.current = 0;
-  };
-
-  const sendAudioChunkForKeywordDetection = async (audioChunk, chunkNumber) => {
-    try {
-      const formData = new FormData();
-      formData.append('audio', audioChunk, `chunk_${chunkNumber}_${Date.now()}.webm`);
-      formData.append('sessionId', sessionId);
-      formData.append('startKeyword', startKeyword);
-      formData.append('endKeyword', endKeyword);
-      formData.append('isMagicActive', String(magicActiveRef.current));
-      formData.append('chunkNumber', chunkNumber);
-      axios.post(`${BASE_URL}/process-audio-chunk`, formData, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 10000 })
-        .then(res => console.log(`✅ Chunk ${chunkNumber} processed`))
-        .catch(err => console.error(err));
-    } catch (err) { console.error(err); }
-  };
-
-  const sendAudioToBackend = async (audioBlob) => {
-    console.log("Sending audio blob to backend..");
-    
+  // Function to send audio blob to backend
+  const sendAudioToBackendREST = async (audioBlob) => {
     try {
       const formData = new FormData();
       formData.append('audio', audioBlob, `magic_audio_${Date.now()}.webm`);
       formData.append('sessionId', sessionId);
-      await axios.post(`${BASE_URL}/upload-audio`, formData, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 300000 });
-      console.log("Audio uploaded");
-    } catch (err) { console.error(err); }
+
+      console.log('Sending audio to backend, size:', audioBlob.size);
+
+      const response = await axios.post(`${BASE_URL}/upload-audio`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 60000
+      });
+      console.log('Audio uploaded successfully:', response.data);
+    } catch (err) {
+      console.error('Error uploading audio:', err);
+      if (err.response) {
+        console.error('Response data:', err.response.data);
+        console.error('Response status:', err.response.status);
+      }
+    }
   };
 
-  // --- Logout ---
-  const handleLogout = () => {
-    if (!window.confirm("Are you sure you want to logout?")) return;
-    if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
-    if (!isMobile) stopListening();
-    if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
-    window.sessionStorage.clear();
-    window.location.reload();
+  // Spectator message handling
+  useEffect(() => {
+    if (role === 'spectator' && ws.current) {
+      const handleMessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'transcript') {
+            setTranscript(data.message || data.word);
+          }
+        } catch (error) {
+          console.error("Error parsing message:", error);
+        }
+      };
+
+      ws.current.addEventListener('message', handleMessage);
+
+      return () => {
+        if (ws.current) {
+          ws.current.removeEventListener('message', handleMessage);
+        }
+      };
+    }
+  }, [role, ws]);
+
+  // Auto-start listening when spectator connects
+  useEffect(() => {
+    if (!ws.current || role !== 'magician') return;
+
+    const handleReady = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        if (data.type === "ready" && role === "magician") {
+          console.log("Spectator connected — starting listening...");
+          startListening();
+        }
+
+        if (data.type === "summarize_complete" && role === "magician") {
+          console.log("Summary complete");
+          // Don't stop listening completely, just reset magic state
+          if (isMagicActive) {
+            setIsMagicActive(false);
+            magicActiveRef.current = false;
+          }
+        }
+      } catch (err) {
+        console.error("Error in ready handler:", err);
+      }
+    };
+
+    ws.current.addEventListener("message", handleReady);
+
+    return () => {
+      if (ws.current) {
+        ws.current.removeEventListener("message", handleReady);
+      }
+    };
+  }, [role, ws, isMagicActive]);
+
+  const startListening = () => {
+    if (role === 'magician') {
+      try {
+        SpeechRecognition.startListening({
+          continuous: true,
+          language: 'en-US'
+        });
+        setIsListening(true);
+        resetTranscript();
+        setFullSpeech('');
+        console.log("Started listening for keywords...");
+      } catch (error) {
+        console.error("Error starting recognition:", error);
+      }
+    }
   };
 
+  const stopListening = () => {
+    if (role === 'magician') {
+      try {
+        SpeechRecognition.stopListening();
+        setIsListening(false);
+        setIsMagicActive(false);
+        magicActiveRef.current = false;
+
+        console.log("Stopped listening");
+
+        // Stop audio recording if active
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+          stopAudioRecording();
+        }
+
+        // Send final speech for summarization
+        if (ws.current?.readyState === WebSocket.OPEN && fullSpeech.trim()) {
+          ws.current.send(JSON.stringify({
+            type: "summarize",
+            text: fullSpeech,
+            timestamp: Date.now(),
+          }));
+        }
+
+        resetTranscript();
+        setTranscript('');
+        setMagicSpeech('');
+        setFullSpeech('');
+      } catch (error) {
+        console.error("Error stopping recognition:", error);
+      }
+    }
+  };
+
+  // Sync listening state
+  useEffect(() => {
+    setIsListening(listening);
+  }, [listening]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+      }
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [mediaRecorder, audioStream]);
+
+  // Share link for spectator
   const getSpectatorLink = () => `${window.location.origin}${window.location.pathname}?role=spectator&session=${sessionId}`;
 
-  // --- Mobile Toggle ---
-  const handleMobileListeningToggle = async () => {
-    if (isListeningForKeywords) stopMobileKeywordListening();
-    else await startMobileKeywordListening();
-  };
-
-  // --- Desktop Mic Toggle ---
-  const handleDesktopMicToggle = async () => {
-    if (listening) {
-      if (isMagicActive) await finalizeMagicSession();
-      stopListening();
-    } else startListening();
-  };
-
-  // --- Render ---
-  if (!role) return <LoginPage />;
-  if (!isMobile && !browserSupportsSpeechRecognition) return <div className="container center"><h1>❌ Browser does not support speech recognition</h1></div>;
+  if (!role) {
+    return <LoginPage />;
+  }
 
   if (role === 'magician') {
     const storedUser = JSON.parse(window.sessionStorage.getItem("user"));
-    if (!storedUser) return <LoginPage />;
+    if (!storedUser) {
+      return <LoginPage />;
+    }
+
+    if (!browserSupportsSpeech) {
+      return (
+        <div className="container center">
+          <h1>Your Browser Does Not Support Speech Recognition</h1>
+        </div>
+      );
+    }
 
     return (
       <div className="container magician-view">
         <div className="header">
           <button className='logoutBtn' onClick={handleLogout}>Logout</button>
-          <h1>Magic Session</h1>
-          <div className={`connection-status ${connectionStatus}`}>Status: {connectionStatus}</div>
+          <h1>Magic Session {isMobile && '(Mobile)'}</h1>
+          <div className={`connection-status ${connectionStatus}`}>
+            Status: {connectionStatus}
+          </div>
         </div>
 
         <div className='keyword_container'>
           <div>
             <label>Start Keyword:</label>
-            <input type="text" value={startKeyword} onChange={e => setStartKeyword(e.target.value)} disabled={isMobile ? isListeningForKeywords : listening} />
+            <input
+              type="text"
+              placeholder='Enter Start Keyword'
+              onChange={(e) => setStartKeyword(e.target.value)}
+              disabled={isListening}
+              value={startKeyword}
+            />
           </div>
           <div>
             <label>End Keyword:</label>
-            <input type="text" value={endKeyword} onChange={e => setEndKeyword(e.target.value)} disabled={isMobile ? isListeningForKeywords : listening} />
+            <input
+              type="text"
+              placeholder='Enter End Keyword'
+              onChange={(e) => setEndKeyword(e.target.value)}
+              disabled={isListening}
+              value={endKeyword}
+            />
           </div>
         </div>
 
+        {isMobile && (
+          <div className="mobile-notice">
+            <p>📱 Mobile Mode: Speech recognition active for keyword detection only</p>
+          </div>
+        )}
+
         <div className="recording-controls">
-          {isMobile ? (
-            <button onClick={handleMobileListeningToggle} className={`control-button ${isListeningForKeywords ? 'stop-button' : 'start-button'}`} style={{ fontSize: '18px', padding: '20px 40px' }}>
-              {isListeningForKeywords ? '⏹️ Stop Listening' : '🎤 Start Listening for Keywords'}
-            </button>
-          ) : (
-            <button onClick={handleDesktopMicToggle} className={`control-button ${listening ? 'stop-button' : 'start-button'}`}>
-              🎤 {listening ? 'Stop Microphone' : 'Start Microphone'}
-            </button>
-          )}
+          <button
+            onClick={isListening ? stopListening : startListening}
+            className={`control-button ${isListening ? 'stop-button' : 'start-button'}`}
+          >
+            🎤 {isListening ? 'Stop Listening' : 'Start Listening'}
+          </button>
         </div>
 
-        {((isMobile && isListeningForKeywords) || (!isMobile && listening)) && (
+        {isListening && (
+          <span>
+            {isMagicActive ?
+              <span style={{ fontWeight: 'bold', color: 'green' }}>🔴 Magic Active - Recording</span> :
+              <span style={{ color: 'blue' }}> Listening for "{startKeyword}"...</span>
+            }
+          </span>
+        )}
+
+        {isListening && isMagicActive && (
           <div className="listening-status">
             <h3>You're saying:</h3>
-            <div className="current-transcript">{transcript || "Waiting for speech..."}</div>
-            {isMagicActive ? <div className="magic-speech-display"><h4>Magic Speech Active:</h4><p>{magicSpeech}</p></div> : <p>Waiting for keyword </p>}
+            <div className="current-transcript">
+              {transcript || "Waiting for speech..."}
+            </div>
+            <div className="audio-recording-indicator">
+              🔴 Audio Recording Active - Say "{endKeyword}" to stop
+            </div>
+          </div>
+        )}
+
+        {isListening && !isMagicActive && !isMobile && (
+          <div className="listening-status">
+            <h3>Current speech:</h3>
+            <div className="current-transcript">
+              {transcript || "Waiting for speech..."}
+            </div>
           </div>
         )}
 
@@ -434,9 +625,21 @@ function App() {
           <p>Ask the spectator to scan this QR code or go to this link:</p>
           <div className="link-container">
             <input type="text" value={getSpectatorLink()} readOnly />
-            <button onClick={() => { navigator.clipboard.writeText(getSpectatorLink()); setIsCopied(true); setTimeout(() => setIsCopied(false), 2000); }} className="copy-button">{isCopied ? 'Copied' : "Copy"}</button>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(getSpectatorLink());
+                setIsCopied(true);
+                setTimeout(() => setIsCopied(false), 2000);
+              }}
+              className="copy-button"
+            >
+              {isCopied ? 'Copied' : "Copy"}
+            </button>
           </div>
-          <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(getSpectatorLink())}`} alt="Spectator QR Code" />
+          <img
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(getSpectatorLink())}`}
+            alt="Spectator QR Code"
+          />
         </div>
       </div>
     );
@@ -447,7 +650,17 @@ function App() {
       <div className="container center spectator-view">
         <div className="header">
           <h1>Magic Session</h1>
-          <div className={`connection-status ${connectionStatus}`}>Status: {connectionStatus}</div>
+          <div className={`connection-status ${connectionStatus}`}>
+            Status: {connectionStatus}
+          </div>
+        </div>
+
+        <div className="transcript-box">
+          {transcript ? (
+            <h2>"{transcript}"</h2>
+          ) : (
+            <p>Waiting for the magician to speak...</p>
+          )}
         </div>
       </div>
     );
@@ -457,6 +670,3 @@ function App() {
 }
 
 export default App;
-
-
-
