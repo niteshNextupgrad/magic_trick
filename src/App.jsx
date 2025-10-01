@@ -1,634 +1,10 @@
-// import React, { useState, useEffect, useRef } from 'react';
-// import './App.css';
-// import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
-// import LoginPage from './Login';
-// import axios from 'axios';
-
-// // WebSocket connection hook
-// const useWebSocket = (sessionId, role) => {
-//   const ws = useRef(null);
-//   const [connectionStatus, setConnectionStatus] = useState('disconnected');
-//   const reconnectInterval = useRef(null);
-
-//   useEffect(() => {
-//     if (sessionId && role) {
-//       const connect = () => {
-//         console.log('Attempting WebSocket connection...');
-//         const wsUrl = "ws://localhost:3001"
-//         // const wsUrl = "wss://magix-trix.onrender.com"
-//         ws.current = new WebSocket(wsUrl);
-
-//         ws.current.onopen = () => {
-//           console.log('WebSocket Connected');
-//           setConnectionStatus('connected');
-
-//           // Clear reconnect loop if connected
-//           if (reconnectInterval.current) {
-//             clearInterval(reconnectInterval.current);
-//             reconnectInterval.current = null;
-//           }
-
-//           ws.current.send(JSON.stringify({ type: 'join', sessionId, role }));
-//         };
-
-//         ws.current.onmessage = (event) => {
-//           try {
-//             const data = JSON.parse(event.data);
-
-//             if (data.type === 'joined') {
-//               console.log("Successfully joined session:", data.sessionId);
-//             }
-
-//             // Magician receives completion confirmation - can trigger vibration
-//             if (data.type === 'summarize_complete' && role === 'magician') {
-//               console.log("AI processing complete, topics:", data.topic);
-
-//               // Vibrate magician's device when processing is complete
-//               if (data.topic && data.topic.length > 0 && navigator.vibrate) {
-//                 navigator.vibrate([1000, 200, 1000, 200, 1000]);
-//                 // setTimeout(() => {
-//                 //   window.location.reload()
-//                 // }, 5000)
-//               } else if (navigator.vibrate) {
-//                 navigator.vibrate([100, 200, 100]);
-//               }
-//             }
-
-//             // Handle summary response - spectator gets redirected to Google search
-//             if (data.type === 'summary' && role === 'spectator') {
-//               console.log("Summary Data received:", data);
-//               if (data.topic && data.topic.length > 0) {
-//                 window.location.href = `https://www.google.com/search?q=${data.topic || data.summary}`;
-//               } else {
-//                 console.log("Couldn't identify a clear topic. Please try again.");
-//               }
-//             }
-
-//           } catch (error) {
-//             console.error("Error parsing message:", error, event.data);
-//           }
-//         };
-
-//         ws.current.onclose = () => {
-//           console.log('WebSocket Disconnected');
-//           setConnectionStatus('disconnected');
-
-//           // Prevent multiple reconnect loops
-//           if (!reconnectInterval.current) {
-//             reconnectInterval.current = setInterval(() => {
-//               console.log("Attempting reconnect...");
-//               connect();
-//             }, 3000);
-//           }
-//         };
-
-//         ws.current.onerror = (error) => {
-//           console.error('WebSocket error:', error);
-//           setConnectionStatus('error');
-//         };
-//       };
-
-//       connect();
-
-//       return () => {
-//         clearInterval(reconnectInterval.current);
-//         if (ws.current) ws.current.close();
-//       };
-//     }
-//   }, [sessionId, role]);
-
-//   return { ws, connectionStatus };
-// };
-
-// function App() {
-//   const [role, setRole] = useState(null);
-//   const [sessionId, setSessionId] = useState('');
-//   const [transcript, setTranscript] = useState('');
-//   const [fullSpeech, setFullSpeech] = useState('');
-//   const [isListening, setIsListening] = useState(false);
-//   const [browserSupportsSpeech, setBrowserSupportsSpeech] = useState(true);
-//   const [isMagicActive, setIsMagicActive] = useState(false);
-//   const [magicSpeech, setMagicSpeech] = useState('');
-//   const [isCopied, setIsCopied] = useState(false)
-//   const [startKeyword, setStartKeyword] = useState("start magic")
-//   const [endKeyword, setEndKeyword] = useState("stop magic")
-//   const [mediaRecorder, setMediaRecorder] = useState(null);
-//   const [audioStream, setAudioStream] = useState(null);
-
-//   // Refs to prevent re-render issues
-//   const isProcessingRef = useRef(false);
-//   const magicActiveRef = useRef(false);
-
-//   const { ws, connectionStatus } = useWebSocket(sessionId, role);
-
-//   // const BASE_URL = 'https://magix-trix.onrender.com/api'
-//   const BASE_URL = 'http://localhost:3001/api'
-
-//   const handleLogout = () => {
-//     if (!confirm("Are you sure, want to logout?")) return;
-//     window.sessionStorage.clear()
-//     window.location.reload()
-//   };
-
-//   // Use react-speech-recognition hook
-//   const {
-//     transcript: speechTranscript,
-//     listening,
-//     resetTranscript,
-//     browserSupportsSpeechRecognition
-//   } = useSpeechRecognition();
-
-//   // Update browser support state
-//   useEffect(() => {
-//     if (!browserSupportsSpeechRecognition) {
-//       setBrowserSupportsSpeech(false);
-//     }
-//   }, [browserSupportsSpeechRecognition]);
-
-//   // Parse URL for role/session
-//   useEffect(() => {
-//     const params = new URLSearchParams(window.location.search);
-//     const roleParam = params.get('role');
-//     const sessionParam = params.get('session');
-//     if (roleParam && sessionParam) {
-//       setRole(roleParam);
-//       setSessionId(sessionParam);
-//     }
-//   }, []);
-
-//   useEffect(() => {
-//     if (!role || role !== 'magician') return;
-
-//     const handleEnd = () => {
-//       if (isListening) {
-//         console.log("Restarting recognition (mobile fix)...");
-//         SpeechRecognition.startListening({ continuous: true, language: 'en-US' });
-//       }
-//     };
-
-//     SpeechRecognition.onend = handleEnd;
-
-//     return () => {
-//       SpeechRecognition.onend = null;
-//     };
-//   }, [isListening, role]);
-
-//   // Initialize audio recording
-//   const initAudioRecording = async () => {
-//     try {
-//       const stream = await navigator.mediaDevices.getUserMedia({
-//         audio: {
-//           echoCancellation: true,
-//           noiseSuppression: true,
-//           sampleRate: 16000,
-//           channelCount: 1
-//         }
-//       });
-
-//       const recorder = new MediaRecorder(stream, {
-//         mimeType: 'audio/webm'
-//       });
-
-//       const chunks = [];
-
-//       recorder.ondataavailable = (event) => {
-//         if (event.data.size > 0) {
-//           chunks.push(event.data);
-//         }
-//       };
-
-//       recorder.onstop = async () => {
-//         try {
-//           const audioBlob = new Blob(chunks, { type: 'audio/webm' });
-//           console.log('Audio blob created, size:', audioBlob.size);
-
-//           if (audioBlob.size > 0) {
-//             await sendAudioToBackendREST(audioBlob);
-//           }
-//         } catch (error) {
-//           console.error('Error processing recorded audio:', error);
-//         } finally {
-//           // Clean up stream
-//           if (stream) {
-//             stream.getTracks().forEach(track => track.stop());
-//           }
-//         }
-//       };
-
-//       setMediaRecorder(recorder);
-//       setAudioStream(stream);
-//       return recorder;
-//     } catch (error) {
-//       console.error('Error initializing audio recording:', error);
-//       return null;
-//     }
-//   };
-
-//   const startAudioRecording = async () => {
-//     if (mediaRecorder && mediaRecorder.state === 'recording') {
-//       console.log('Audio recording already in progress');
-//       return;
-//     }
-
-//     const recorder = await initAudioRecording();
-//     if (recorder) {
-//       recorder.start(1000); // Collect data every second
-//       console.log('Audio recording started');
-//     }
-//   };
-
-//   const stopAudioRecording = () => {
-//     if (mediaRecorder && mediaRecorder.state === 'recording') {
-//       mediaRecorder.stop();
-//       console.log('Audio recording stopped');
-//       setMediaRecorder(null);
-
-//       // Clean up stream
-//       if (audioStream) {
-//         audioStream.getTracks().forEach(track => track.stop());
-//         setAudioStream(null);
-//       }
-//     }
-//   };
-
-//   // Main speech processing logic with debouncing
-//   useEffect(() => {
-//     if (role !== 'magician' || !speechTranscript || isProcessingRef.current) return;
-
-//     const lowerText = speechTranscript.toLowerCase();
-//     const containsStart = lowerText.includes(startKeyword.toLowerCase());
-//     const containsEnd = lowerText.includes(endKeyword.toLowerCase());
-
-//     // Prevent simultaneous start/stop processing
-//     if (containsStart && containsEnd) {
-//       console.log('Both start and end keywords detected, prioritizing stop');
-//       // Process stop first, then ignore start
-//       if (magicActiveRef.current) {
-//         handleStopMagic();
-//       }
-//       return;
-//     }
-
-//     if (containsStart && !magicActiveRef.current) {
-//       handleStartMagic();
-//     } else if (containsEnd && magicActiveRef.current) {
-//       handleStopMagic();
-//     } else if (magicActiveRef.current) {
-//       // Normal speech during magic session
-//       handleMagicSpeech(speechTranscript);
-//     }
-//   }, [speechTranscript, role]);
-
-//   const handleStartMagic = async () => {
-//     if (isProcessingRef.current) return;
-
-//     isProcessingRef.current = true;
-//     console.log("Magic recording started!");
-
-//     magicActiveRef.current = true;
-//     setIsMagicActive(true);
-//     setMagicSpeech('');
-//     setFullSpeech('');
-
-//     await startAudioRecording();
-//     isProcessingRef.current = false;
-//   };
-
-//   const handleStopMagic = () => {
-//     if (isProcessingRef.current) return;
-
-//     isProcessingRef.current = true;
-//     console.log("Magic recording stopped!");
-
-//     magicActiveRef.current = false;
-//     setIsMagicActive(false);
-
-//     stopAudioRecording();
-
-//     // Send full speech for summarization
-//     if (fullSpeech.trim() && ws.current?.readyState === WebSocket.OPEN) {
-//       ws.current.send(JSON.stringify({
-//         type: "summarize",
-//         text: fullSpeech,
-//         timestamp: Date.now()
-//       }));
-//     }
-
-//     isProcessingRef.current = false;
-//   };
-
-//   const handleMagicSpeech = (text) => {
-//     let cleanText = text
-//       .replace(new RegExp(startKeyword, 'gi'), '')
-//       .replace(new RegExp(endKeyword, 'gi'), '')
-//       .trim();
-
-//     if (cleanText) {
-//       const updatedSpeech = magicSpeech ? magicSpeech + ' ' + cleanText : cleanText;
-//       setMagicSpeech(updatedSpeech);
-//       setFullSpeech(updatedSpeech);
-//       setTranscript(cleanText);
-
-//       // Send live transcript to spectator
-//       if (ws.current?.readyState === WebSocket.OPEN) {
-//         ws.current.send(JSON.stringify({
-//           type: "test",
-//           message: cleanText,
-//           timestamp: Date.now()
-//         }));
-//       }
-//     }
-//   };
-
-//   // Function to send audio blob to backend
-//   const sendAudioToBackendREST = async (audioBlob) => {
-//     try {
-//       const formData = new FormData();
-//       formData.append('audio', audioBlob, `magic_audio_${Date.now()}.webm`);
-//       formData.append('sessionId', sessionId);
-
-//       console.log('Sending audio to backend, size:', audioBlob.size);
-
-//       const response = await axios.post(`${BASE_URL}/upload-audio`, formData, {
-//         headers: {
-//           'Content-Type': 'multipart/form-data',
-//         },
-//         timeout: 60000
-//       });
-//       console.log('Audio uploaded successfully:', response.data);
-//     } catch (err) {
-//       console.error('Error uploading audio:', err);
-//       if (err.response) {
-//         console.error('Response data:', err.response.data);
-//         console.error('Response status:', err.response.status);
-//       }
-//     }
-//   };
-
-//   // Spectator message handling
-//   useEffect(() => {
-//     if (role === 'spectator' && ws.current) {
-//       const handleMessage = (event) => {
-//         try {
-//           const data = JSON.parse(event.data);
-//           if (data.type === 'transcript') {
-//             setTranscript(data.word);
-//           }
-//         } catch (error) {
-//           console.error("Error parsing message:", error);
-//         }
-//       };
-
-//       ws.current.addEventListener('message', handleMessage);
-
-//       return () => {
-//         if (ws.current) {
-//           ws.current.removeEventListener('message', handleMessage);
-//         }
-//       };
-//     }
-//   }, [role, ws]);
-
-//   // Auto-start/stop listening based on session readiness
-//   useEffect(() => {
-//     if (!ws.current) return;
-
-//     const handleReady = (event) => {
-//       try {
-//         const data = JSON.parse(event.data);
-
-//         if (data.type === "ready" && role === "magician") {
-//           console.log("Spectator connected — starting listening...");
-//           startListening();
-//         }
-
-//         if (data.type === "summarize_complete" && role === "magician") {
-//           console.log("Summary complete — stopping listening");
-//           stopListening();
-//         }
-//       } catch (err) {
-//         console.error("Error in ready handler:", err);
-//       }
-//     };
-
-//     ws.current.addEventListener("message", handleReady);
-
-//     return () => {
-//       ws.current.removeEventListener("message", handleReady);
-//     };
-//   }, [role, ws]);
-
-//   const startListening = () => {
-//     if (role === 'magician') {
-//       try {
-//         SpeechRecognition.startListening({
-//           continuous: true,
-//           language: 'en-US'
-//         });
-//         setIsListening(true);
-//         resetTranscript();
-//         setFullSpeech('');
-//         console.log("Started listening...");
-//       } catch (error) {
-//         console.error("Error starting recognition:", error);
-//       }
-//     }
-//   };
-
-//   const stopListening = () => {
-//     if (role === 'magician') {
-//       try {
-//         SpeechRecognition.stopListening();
-//         setIsListening(false);
-//         setIsMagicActive(false);
-//         magicActiveRef.current = false;
-
-//         console.log("Stopped listening");
-
-//         // Stop audio recording if active
-//         if (mediaRecorder && mediaRecorder.state === 'recording') {
-//           stopAudioRecording();
-//         }
-
-//         // Send final speech for summarization
-//         if (ws.current?.readyState === WebSocket.OPEN && fullSpeech.trim()) {
-//           ws.current.send(JSON.stringify({
-//             type: "summarize",
-//             text: fullSpeech,
-//             timestamp: Date.now(),
-//           }));
-//         }
-
-//         resetTranscript();
-//         setTranscript('');
-//         setMagicSpeech('');
-//         setFullSpeech('');
-//       } catch (error) {
-//         console.error("Error stopping recognition:", error);
-//       }
-//     }
-//   };
-
-//   // Sync listening state
-//   useEffect(() => {
-//     setIsListening(listening);
-//   }, [listening]);
-
-//   // Cleanup on unmount
-//   useEffect(() => {
-//     return () => {
-//       if (mediaRecorder && mediaRecorder.state === 'recording') {
-//         mediaRecorder.stop();
-//       }
-//       if (audioStream) {
-//         audioStream.getTracks().forEach(track => track.stop());
-//       }
-//     };
-//   }, [mediaRecorder, audioStream]);
-
-//   // Share link for spectator
-//   const getSpectatorLink = () => `${window.location.origin}${window.location.pathname}?role=spectator&session=${sessionId}`;
-
-//   if (!role) {
-//     return <LoginPage />;
-//   }
-
-//   if (role === 'magician') {
-//     const storedUser = JSON.parse(window.sessionStorage.getItem("user"));
-//     if (!storedUser) {
-//       return <LoginPage />;
-//     }
-
-//     if (!browserSupportsSpeech) {
-//       return (
-//         <div className="container center">
-//           <h1>Your Browser Does Not Support Speech Recognition</h1>
-//         </div>
-//       );
-//     }
-
-//     return (
-//       <div className="container magician-view">
-//         <div className="header">
-//           <button className='logoutBtn' onClick={handleLogout}>Logout</button>
-//           <h1>Magic Session</h1>
-//           <div className={`connection-status ${connectionStatus}`}>
-//             Status: {connectionStatus}
-//           </div>
-//         </div>
-
-//         <div className='keyword_container'>
-//           <div>
-//             <label>Start Keyword:</label>
-//             <input
-//               type="text"
-//               placeholder='Enter Start Keyword'
-//               onChange={(e) => setStartKeyword(e.target.value)}
-//               disabled={isListening}
-//               value={startKeyword}
-//             />
-//           </div>
-//           <div>
-//             <label>End Keyword:</label>
-//             <input
-//               type="text"
-//               placeholder='Enter End Keyword'
-//               onChange={(e) => setEndKeyword(e.target.value)}
-//               disabled={isListening}
-//               value={endKeyword}
-//             />
-//           </div>
-//         </div>
-
-//         <div className="recording-controls">
-//           <button
-//             onClick={isListening ? stopListening : startListening}
-//             className={`control-button ${isListening ? 'stop-button' : 'start-button'}`}
-//           >
-//             🎤 {isListening ? 'Stop Speaking' : 'Start Speaking'}
-//           </button>
-//         </div>
-
-//         {isListening && (
-//           <span>
-//             {isMagicActive ?
-//               <span style={{ fontWeight: 'bold', color: 'green' }}>🔴 Magic Active - Recording</span> :
-//               <span style={{ color: 'blue' }}> Listening for keywords...</span>
-//             }
-//           </span>
-//         )}
-
-//         {isListening && (
-//           <div className="listening-status">
-//             <h3>You're saying:</h3>
-//             <div className="current-transcript">
-//               {transcript || "Waiting for speech..."}
-//             </div>
-//             {isMagicActive && (
-//               <div className="audio-recording-indicator">
-//                 🔴 Audio Recording Active - Say "{endKeyword}" to stop
-//               </div>
-//             )}
-//           </div>
-//         )}
-
-//         <div className="share-info">
-//           <p>Ask the spectator to scan this QR code or go to this link:</p>
-//           <div className="link-container">
-//             <input type="text" value={getSpectatorLink()} readOnly />
-//             <button
-//               onClick={() => {
-//                 navigator.clipboard.writeText(getSpectatorLink());
-//                 setIsCopied(true);
-//                 setTimeout(() => setIsCopied(false), 2000);
-//               }}
-//               className="copy-button"
-//             >
-//               {isCopied ? 'Copied' : "Copy"}
-//             </button>
-//           </div>
-//           <img
-//             src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(getSpectatorLink())}`}
-//             alt="Spectator QR Code"
-//           />
-//         </div>
-//       </div>
-//     );
-//   }
-
-//   if (role === 'spectator') {
-//     return (
-//       <div className="container center spectator-view">
-//         <div className="header">
-//           <h1>Magic Session</h1>
-//           <div className={`connection-status ${connectionStatus}`}>
-//             Status: {connectionStatus}
-//           </div>
-//         </div>
-
-//         <div className="transcript-box">
-//           {transcript ? (
-//             <h2>"{transcript}"</h2>
-//           ) : (
-//             <p>Waiting for the magician to speak...</p>
-//           )}
-//         </div>
-//       </div>
-//     );
-//   }
-
-//   return null;
-// }
-
-// export default App;
-
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 import LoginPage from './Login';
 import axios from 'axios';
 
-// WebSocket connection hook (keep this same as before)
+// WebSocket connection hook
 const useWebSocket = (sessionId, role) => {
   const ws = useRef(null);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
@@ -640,18 +16,16 @@ const useWebSocket = (sessionId, role) => {
         console.log('Attempting WebSocket connection...');
         // const wsUrl = "ws://localhost:3001"
         const wsUrl = "wss://magix-trix.onrender.com"
+
         ws.current = new WebSocket(wsUrl);
 
         ws.current.onopen = () => {
           console.log('WebSocket Connected');
           setConnectionStatus('connected');
-
-          // Clear reconnect loop if connected
           if (reconnectInterval.current) {
             clearInterval(reconnectInterval.current);
             reconnectInterval.current = null;
           }
-
           ws.current.send(JSON.stringify({ type: 'join', sessionId, role }));
         };
 
@@ -663,11 +37,8 @@ const useWebSocket = (sessionId, role) => {
               console.log("Successfully joined session:", data.sessionId);
             }
 
-            // Magician receives completion confirmation - can trigger vibration
             if (data.type === 'summarize_complete' && role === 'magician') {
               console.log("AI processing complete, topics:", data.topic);
-
-              // Vibrate magician's device when processing is complete
               if (data.topic && data.topic.length > 0 && navigator.vibrate) {
                 navigator.vibrate([1000, 200, 1000, 200, 1000]);
               } else if (navigator.vibrate) {
@@ -675,7 +46,6 @@ const useWebSocket = (sessionId, role) => {
               }
             }
 
-            // Handle summary response - spectator gets redirected to Google search
             if (data.type === 'summary' && role === 'spectator') {
               console.log("Summary Data received:", data);
               if (data.topic && data.topic.length > 0) {
@@ -693,8 +63,6 @@ const useWebSocket = (sessionId, role) => {
         ws.current.onclose = () => {
           console.log('WebSocket Disconnected');
           setConnectionStatus('disconnected');
-
-          // Prevent multiple reconnect loops
           if (!reconnectInterval.current) {
             reconnectInterval.current = setInterval(() => {
               console.log("Attempting reconnect...");
@@ -735,26 +103,15 @@ function App() {
   const [endKeyword, setEndKeyword] = useState("stop magic")
   const [mediaRecorder, setMediaRecorder] = useState(null);
   const [audioStream, setAudioStream] = useState(null);
-  const [isMobile, setIsMobile] = useState(false);
 
-  // Refs to prevent re-render issues
   const isProcessingRef = useRef(false);
   const magicActiveRef = useRef(false);
-  const speechTimeoutRef = useRef(null);
-  const recognitionRestartRef = useRef(null);
+  const isListeningRef = useRef(false); // MOBILE FIX
 
   const { ws, connectionStatus } = useWebSocket(sessionId, role);
 
-  const BASE_URL = 'https://magix-trix.onrender.com/api'
   // const BASE_URL = 'http://localhost:3001/api'
-
-  // Detect mobile device
-  useEffect(() => {
-    const checkMobile = () => {
-      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    };
-    setIsMobile(checkMobile());
-  }, []);
+  const BASE_URL = 'https://magix-trix.onrender.com/api'
 
   const handleLogout = () => {
     if (!confirm("Are you sure, want to logout?")) return;
@@ -762,23 +119,19 @@ function App() {
     window.location.reload()
   };
 
-  // Use react-speech-recognition hook
   const {
     transcript: speechTranscript,
     listening,
     resetTranscript,
-    browserSupportsSpeechRecognition,
-    finalTranscript
+    browserSupportsSpeechRecognition
   } = useSpeechRecognition();
 
-  // Update browser support state
   useEffect(() => {
     if (!browserSupportsSpeechRecognition) {
       setBrowserSupportsSpeech(false);
     }
   }, [browserSupportsSpeechRecognition]);
 
-  // Parse URL for role/session
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const roleParam = params.get('role');
@@ -789,52 +142,31 @@ function App() {
     }
   }, []);
 
-  // Enhanced mobile speech recognition handling
+  // MOBILE FIX: keep isListeningRef updated
+  useEffect(() => {
+    isListeningRef.current = isListening;
+  }, [isListening]);
+
+  // MOBILE FIX: auto-restart on mobile when recognition ends
   useEffect(() => {
     if (!role || role !== 'magician') return;
 
-    const handleSpeechEnd = () => {
-      console.log("Speech recognition ended automatically");
-      
-      // Only restart if we're supposed to be listening and magic is active
-      if (isListening && magicActiveRef.current) {
-        console.log("Restarting speech recognition for mobile...");
-        
-        // Clear any existing restart timeout
-        if (recognitionRestartRef.current) {
-          clearTimeout(recognitionRestartRef.current);
-        }
-        
-        // Restart after a short delay
-        recognitionRestartRef.current = setTimeout(() => {
-          if (isListening && magicActiveRef.current) {
-            try {
-              SpeechRecognition.startListening({ 
-                continuous: true, 
-                language: 'en-US',
-                interimResults: true
-              });
-              console.log("Speech recognition restarted successfully");
-            } catch (error) {
-              console.error("Failed to restart speech recognition:", error);
-            }
-          }
-        }, 500);
+    const handleEnd = () => {
+      if (isListeningRef.current || magicActiveRef.current) {
+        console.log("Restarting recognition (mobile fix)...");
+        setTimeout(() => {
+          SpeechRecognition.startListening({ continuous: true, language: 'en-US' });
+        }, 100);
       }
     };
 
-    // Set up event listeners for mobile stability
-    SpeechRecognition.onend = handleSpeechEnd;
+    SpeechRecognition.onend = handleEnd;
 
     return () => {
       SpeechRecognition.onend = null;
-      if (recognitionRestartRef.current) {
-        clearTimeout(recognitionRestartRef.current);
-      }
     };
-  }, [isListening, role]);
+  }, [role]);
 
-  // Initialize audio recording (keep same as before)
   const initAudioRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -869,7 +201,6 @@ function App() {
         } catch (error) {
           console.error('Error processing recorded audio:', error);
         } finally {
-          // Clean up stream
           if (stream) {
             stream.getTracks().forEach(track => track.stop());
           }
@@ -903,7 +234,6 @@ function App() {
       mediaRecorder.stop();
       console.log('Audio recording stopped');
       setMediaRecorder(null);
-
       if (audioStream) {
         audioStream.getTracks().forEach(track => track.stop());
         setAudioStream(null);
@@ -911,7 +241,6 @@ function App() {
     }
   };
 
-  // Enhanced speech processing with mobile optimizations
   useEffect(() => {
     if (role !== 'magician' || !speechTranscript || isProcessingRef.current) return;
 
@@ -919,17 +248,7 @@ function App() {
     const containsStart = lowerText.includes(startKeyword.toLowerCase());
     const containsEnd = lowerText.includes(endKeyword.toLowerCase());
 
-    console.log("Processing speech:", {
-      text: speechTranscript,
-      containsStart,
-      containsEnd,
-      isMagicActive: magicActiveRef.current,
-      isMobile
-    });
-
-    // Prevent simultaneous start/stop processing
     if (containsStart && containsEnd) {
-      console.log('Both start and end keywords detected, prioritizing stop');
       if (magicActiveRef.current) {
         handleStopMagic();
       }
@@ -941,24 +260,9 @@ function App() {
     } else if (containsEnd && magicActiveRef.current) {
       handleStopMagic();
     } else if (magicActiveRef.current) {
-      // Normal speech during magic session
       handleMagicSpeech(speechTranscript);
     }
-
-    // Clear any existing timeout
-    if (speechTimeoutRef.current) {
-      clearTimeout(speechTimeoutRef.current);
-    }
-
-    // Set timeout to detect speech gaps (mobile specific)
-    if (isMobile && magicActiveRef.current && speechTranscript.trim()) {
-      speechTimeoutRef.current = setTimeout(() => {
-        console.log("Speech gap detected, ensuring recognition continues...");
-        // Force transcript update to keep UI responsive
-        setTranscript(speechTranscript);
-      }, 2000);
-    }
-  }, [speechTranscript, role, isMobile]);
+  }, [speechTranscript, role]);
 
   const handleStartMagic = async () => {
     if (isProcessingRef.current) return;
@@ -970,21 +274,6 @@ function App() {
     setIsMagicActive(true);
     setMagicSpeech('');
     setFullSpeech('');
-    setTranscript('Magic session started! Speak now...');
-
-    // Ensure speech recognition is running
-    if (!listening) {
-      console.log("Restarting speech recognition for magic session...");
-      try {
-        await SpeechRecognition.startListening({ 
-          continuous: true, 
-          language: 'en-US',
-          interimResults: true 
-        });
-      } catch (error) {
-        console.error("Error restarting speech recognition:", error);
-      }
-    }
 
     await startAudioRecording();
     isProcessingRef.current = false;
@@ -998,22 +287,15 @@ function App() {
 
     magicActiveRef.current = false;
     setIsMagicActive(false);
-    setTranscript('Magic session ended. Processing...');
 
     stopAudioRecording();
 
-    // Send full speech for summarization
     if (fullSpeech.trim() && ws.current?.readyState === WebSocket.OPEN) {
       ws.current.send(JSON.stringify({
         type: "summarize",
         text: fullSpeech,
         timestamp: Date.now()
       }));
-    }
-
-    // Clear timeouts
-    if (speechTimeoutRef.current) {
-      clearTimeout(speechTimeoutRef.current);
     }
 
     isProcessingRef.current = false;
@@ -1031,10 +313,9 @@ function App() {
       setFullSpeech(updatedSpeech);
       setTranscript(cleanText);
 
-      // Send live transcript to spectator
       if (ws.current?.readyState === WebSocket.OPEN) {
         ws.current.send(JSON.stringify({
-          type: "transcript",
+          type: "test",
           message: cleanText,
           timestamp: Date.now()
         }));
@@ -1042,7 +323,6 @@ function App() {
     }
   };
 
-  // Function to send audio blob to backend (keep same)
   const sendAudioToBackendREST = async (audioBlob) => {
     try {
       const formData = new FormData();
@@ -1052,9 +332,7 @@ function App() {
       console.log('Sending audio to backend, size:', audioBlob.size);
 
       const response = await axios.post(`${BASE_URL}/upload-audio`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+        headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 60000
       });
       console.log('Audio uploaded successfully:', response.data);
@@ -1067,117 +345,6 @@ function App() {
     }
   };
 
-  // Enhanced start listening with mobile optimizations
-  const startListening = async () => {
-    if (role === 'magician') {
-      try {
-        // Stop any existing recognition first
-        if (listening) {
-          SpeechRecognition.stopListening();
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-
-        resetTranscript();
-        setFullSpeech('');
-        setTranscript('Listening for keywords...');
-        
-        // Use different approach for mobile
-        if (isMobile) {
-          console.log("Starting mobile-optimized speech recognition...");
-          SpeechRecognition.startListening({ 
-            continuous: true, 
-            language: 'en-US',
-            interimResults: true
-          });
-        } else {
-          SpeechRecognition.startListening({
-            continuous: true,
-            language: 'en-US'
-          });
-        }
-        
-        setIsListening(true);
-        console.log("Started listening...");
-      } catch (error) {
-        console.error("Error starting recognition:", error);
-        // Retry once after short delay
-        setTimeout(() => {
-          if (role === 'magician') {
-            SpeechRecognition.startListening({ 
-              continuous: true, 
-              language: 'en-US',
-              interimResults: true 
-            });
-          }
-        }, 500);
-      }
-    }
-  };
-
-  const stopListening = () => {
-    if (role === 'magician') {
-      try {
-        SpeechRecognition.stopListening();
-        setIsListening(false);
-        setIsMagicActive(false);
-        magicActiveRef.current = false;
-
-        console.log("Stopped listening");
-
-        // Stop audio recording if active
-        if (mediaRecorder && mediaRecorder.state === 'recording') {
-          stopAudioRecording();
-        }
-
-        // Send final speech for summarization
-        if (ws.current?.readyState === WebSocket.OPEN && fullSpeech.trim()) {
-          ws.current.send(JSON.stringify({
-            type: "summarize",
-            text: fullSpeech,
-            timestamp: Date.now(),
-          }));
-        }
-
-        resetTranscript();
-        setTranscript('');
-        setMagicSpeech('');
-        setFullSpeech('');
-
-        // Clear all timeouts
-        if (speechTimeoutRef.current) {
-          clearTimeout(speechTimeoutRef.current);
-        }
-        if (recognitionRestartRef.current) {
-          clearTimeout(recognitionRestartRef.current);
-        }
-      } catch (error) {
-        console.error("Error stopping recognition:", error);
-      }
-    }
-  };
-
-  // Add manual stop button for mobile fallback
-  const ManualStopButton = () => (
-    isMagicActive && (
-      <div className="manual-stop-fallback">
-        <p style={{color: 'red', fontSize: '14px'}}>
-          Can't detect stop keyword? Use manual stop:
-        </p>
-        <button 
-          onClick={handleStopMagic}
-          className="control-button stop-button"
-          style={{backgroundColor: '#ff4444'}}
-        >
-          🛑 Manual Stop
-        </button>
-      </div>
-    )
-  );
-
-  // Rest of the component remains the same...
-  // [Keep all the spectator code and rendering logic the same as your original]
-
-  // Spectator message handling (keep same)
   useEffect(() => {
     if (role === 'spectator' && ws.current) {
       const handleMessage = (event) => {
@@ -1201,7 +368,6 @@ function App() {
     }
   }, [role, ws]);
 
-  // Auto-start/stop listening based on session readiness (keep same)
   useEffect(() => {
     if (!ws.current) return;
 
@@ -1230,12 +396,59 @@ function App() {
     };
   }, [role, ws]);
 
-  // Sync listening state
+  const startListening = () => {
+    if (role === 'magician') {
+      try {
+        SpeechRecognition.startListening({
+          continuous: true,
+          language: 'en-US'
+        });
+        setIsListening(true);
+        resetTranscript();
+        setFullSpeech('');
+        console.log("Started listening...");
+      } catch (error) {
+        console.error("Error starting recognition:", error);
+      }
+    }
+  };
+
+  const stopListening = () => {
+    if (role === 'magician') {
+      try {
+        SpeechRecognition.stopListening();
+        setIsListening(false);
+        setIsMagicActive(false);
+        magicActiveRef.current = false;
+
+        console.log("Stopped listening");
+
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+          stopAudioRecording();
+        }
+
+        if (ws.current?.readyState === WebSocket.OPEN && fullSpeech.trim()) {
+          ws.current.send(JSON.stringify({
+            type: "summarize",
+            text: fullSpeech,
+            timestamp: Date.now(),
+          }));
+        }
+
+        resetTranscript();
+        setTranscript('');
+        setMagicSpeech('');
+        setFullSpeech('');
+      } catch (error) {
+        console.error("Error stopping recognition:", error);
+      }
+    }
+  };
+
   useEffect(() => {
     setIsListening(listening);
   }, [listening]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (mediaRecorder && mediaRecorder.state === 'recording') {
@@ -1244,24 +457,16 @@ function App() {
       if (audioStream) {
         audioStream.getTracks().forEach(track => track.stop());
       }
-      // Clear all timeouts
-      if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current);
-      if (recognitionRestartRef.current) clearTimeout(recognitionRestartRef.current);
     };
   }, [mediaRecorder, audioStream]);
 
-  // Share link for spectator
   const getSpectatorLink = () => `${window.location.origin}${window.location.pathname}?role=spectator&session=${sessionId}`;
 
-  if (!role) {
-    return <LoginPage />;
-  }
+  if (!role) return <LoginPage />;
 
   if (role === 'magician') {
     const storedUser = JSON.parse(window.sessionStorage.getItem("user"));
-    if (!storedUser) {
-      return <LoginPage />;
-    }
+    if (!storedUser) return <LoginPage />;
 
     if (!browserSupportsSpeech) {
       return (
@@ -1275,7 +480,7 @@ function App() {
       <div className="container magician-view">
         <div className="header">
           <button className='logoutBtn' onClick={handleLogout}>Logout</button>
-          <h1>Magic Session {isMobile && '(Mobile)'}</h1>
+          <h1>Magic Session</h1>
           <div className={`connection-status ${connectionStatus}`}>
             Status: {connectionStatus}
           </div>
@@ -1329,12 +534,9 @@ function App() {
               {transcript || "Waiting for speech..."}
             </div>
             {isMagicActive && (
-              <>
-                <div className="audio-recording-indicator">
-                  🔴 Audio Recording Active - Say "{endKeyword}" to stop
-                </div>
-                <ManualStopButton />
-              </>
+              <div className="audio-recording-indicator">
+                🔴 Audio Recording Active - Say "{endKeyword}" to stop
+              </div>
             )}
           </div>
         )}
