@@ -1,11 +1,10 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 import LoginPage from './Login';
 import axios from 'axios';
 
-// WebSocket connection hook (keep your existing WebSocket code)
+// WebSocket connection hook
 const useWebSocket = (sessionId, role) => {
   const ws = useRef(null);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
@@ -15,8 +14,8 @@ const useWebSocket = (sessionId, role) => {
     if (sessionId && role) {
       const connect = () => {
         console.log('Attempting WebSocket connection...');
-        // const wsUrl = "ws://localhost:3001"
-        const wsUrl = "wss://magix-trix.onrender.com"
+        const wsUrl = "ws://localhost:3001"
+        // const wsUrl = "wss://magix-trix.onrender.com"
         ws.current = new WebSocket(wsUrl);
 
         ws.current.onopen = () => {
@@ -47,6 +46,9 @@ const useWebSocket = (sessionId, role) => {
               // Vibrate magician's device when processing is complete
               if (data.topic && data.topic.length > 0 && navigator.vibrate) {
                 navigator.vibrate([1000, 200, 1000, 200, 1000]);
+                // setTimeout(() => {
+                //   window.location.reload()
+                // }, 5000)
               } else if (navigator.vibrate) {
                 navigator.vibrate([100, 200, 100]);
               }
@@ -112,25 +114,15 @@ function App() {
   const [endKeyword, setEndKeyword] = useState("stop magic")
   const [mediaRecorder, setMediaRecorder] = useState(null);
   const [audioStream, setAudioStream] = useState(null);
-  const [isMobile, setIsMobile] = useState(false);
 
   // Refs to prevent re-render issues
   const isProcessingRef = useRef(false);
   const magicActiveRef = useRef(false);
-  const speechBufferRef = useRef('');
 
   const { ws, connectionStatus } = useWebSocket(sessionId, role);
 
-  const BASE_URL = 'https://magix-trix.onrender.com/api'
-  // const BASE_URL = 'http://localhost:3001/api'
-
-  // Detect mobile device
-  useEffect(() => {
-    const checkMobile = () => {
-      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    };
-    setIsMobile(checkMobile());
-  }, []);
+  // const BASE_URL = 'https://magix-trix.onrender.com/api'
+  const BASE_URL = 'http://localhost:3001/api'
 
   const handleLogout = () => {
     if (!confirm("Are you sure, want to logout?")) return;
@@ -164,13 +156,12 @@ function App() {
     }
   }, []);
 
-  // Mobile-specific speech recognition handling
   useEffect(() => {
-    if (!role || role !== 'magician' || !isMobile) return;
+    if (!role || role !== 'magician') return;
 
     const handleEnd = () => {
-      if (isListening && !magicActiveRef.current) {
-        console.log("Restarting recognition for keyword detection...");
+      if (isListening) {
+        console.log("Restarting recognition (mobile fix)...");
         SpeechRecognition.startListening({ continuous: true, language: 'en-US' });
       }
     };
@@ -180,7 +171,7 @@ function App() {
     return () => {
       SpeechRecognition.onend = null;
     };
-  }, [isListening, role, isMobile]);
+  }, [isListening, role]);
 
   // Initialize audio recording
   const initAudioRecording = async () => {
@@ -241,7 +232,7 @@ function App() {
 
     const recorder = await initAudioRecording();
     if (recorder) {
-      recorder.start(1000);
+      recorder.start(1000); // Collect data every second
       console.log('Audio recording started');
     }
   };
@@ -252,6 +243,7 @@ function App() {
       console.log('Audio recording stopped');
       setMediaRecorder(null);
 
+      // Clean up stream
       if (audioStream) {
         audioStream.getTracks().forEach(track => track.stop());
         setAudioStream(null);
@@ -259,7 +251,7 @@ function App() {
     }
   };
 
-  // Enhanced speech processing with mobile support
+  // Main speech processing logic with debouncing
   useEffect(() => {
     if (role !== 'magician' || !speechTranscript || isProcessingRef.current) return;
 
@@ -270,6 +262,7 @@ function App() {
     // Prevent simultaneous start/stop processing
     if (containsStart && containsEnd) {
       console.log('Both start and end keywords detected, prioritizing stop');
+      // Process stop first, then ignore start
       if (magicActiveRef.current) {
         handleStopMagic();
       }
@@ -283,13 +276,8 @@ function App() {
     } else if (magicActiveRef.current) {
       // Normal speech during magic session
       handleMagicSpeech(speechTranscript);
-    } else {
-      // On mobile, don't show transcript when not in magic mode to avoid conflicts
-      if (!isMobile) {
-        setTranscript(speechTranscript);
-      }
     }
-  }, [speechTranscript, role, isMobile]);
+  }, [speechTranscript, role]);
 
   const handleStartMagic = async () => {
     if (isProcessingRef.current) return;
@@ -301,17 +289,8 @@ function App() {
     setIsMagicActive(true);
     setMagicSpeech('');
     setFullSpeech('');
-    speechBufferRef.current = '';
 
-    // On mobile, stop speech recognition and start audio recording only
-    if (isMobile) {
-      SpeechRecognition.stopListening();
-      await startAudioRecording();
-    } else {
-      // On desktop, use both
-      await startAudioRecording();
-    }
-
+    await startAudioRecording();
     isProcessingRef.current = false;
   };
 
@@ -335,13 +314,6 @@ function App() {
       }));
     }
 
-    // On mobile, restart speech recognition for keyword detection
-    if (isMobile && isListening) {
-      setTimeout(() => {
-        SpeechRecognition.startListening({ continuous: true, language: 'en-US' });
-      }, 500);
-    }
-
     isProcessingRef.current = false;
   };
 
@@ -355,14 +327,12 @@ function App() {
       const updatedSpeech = magicSpeech ? magicSpeech + ' ' + cleanText : cleanText;
       setMagicSpeech(updatedSpeech);
       setFullSpeech(updatedSpeech);
-      
-      // Show transcript only when magic is active
       setTranscript(cleanText);
 
       // Send live transcript to spectator
       if (ws.current?.readyState === WebSocket.OPEN) {
         ws.current.send(JSON.stringify({
-          type: "transcript",
+          type: "test",
           message: cleanText,
           timestamp: Date.now()
         }));
@@ -402,7 +372,7 @@ function App() {
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'transcript') {
-            setTranscript(data.message || data.word);
+            setTranscript(data.word);
           }
         } catch (error) {
           console.error("Error parsing message:", error);
@@ -419,9 +389,9 @@ function App() {
     }
   }, [role, ws]);
 
-  // Auto-start listening when spectator connects
+  // Auto-start/stop listening based on session readiness
   useEffect(() => {
-    if (!ws.current || role !== 'magician') return;
+    if (!ws.current) return;
 
     const handleReady = (event) => {
       try {
@@ -433,12 +403,8 @@ function App() {
         }
 
         if (data.type === "summarize_complete" && role === "magician") {
-          console.log("Summary complete");
-          // Don't stop listening completely, just reset magic state
-          if (isMagicActive) {
-            setIsMagicActive(false);
-            magicActiveRef.current = false;
-          }
+          console.log("Summary complete — stopping listening");
+          stopListening();
         }
       } catch (err) {
         console.error("Error in ready handler:", err);
@@ -448,11 +414,9 @@ function App() {
     ws.current.addEventListener("message", handleReady);
 
     return () => {
-      if (ws.current) {
-        ws.current.removeEventListener("message", handleReady);
-      }
+      ws.current.removeEventListener("message", handleReady);
     };
-  }, [role, ws, isMagicActive]);
+  }, [role, ws]);
 
   const startListening = () => {
     if (role === 'magician') {
@@ -464,7 +428,7 @@ function App() {
         setIsListening(true);
         resetTranscript();
         setFullSpeech('');
-        console.log("Started listening for keywords...");
+        console.log("Started listening...");
       } catch (error) {
         console.error("Error starting recognition:", error);
       }
@@ -547,7 +511,7 @@ function App() {
       <div className="container magician-view">
         <div className="header">
           <button className='logoutBtn' onClick={handleLogout}>Logout</button>
-          <h1>Magic Session {isMobile && '(Mobile)'}</h1>
+          <h1>Magic Session</h1>
           <div className={`connection-status ${connectionStatus}`}>
             Status: {connectionStatus}
           </div>
@@ -576,18 +540,12 @@ function App() {
           </div>
         </div>
 
-        {isMobile && (
-          <div className="mobile-notice">
-            <p>📱 Mobile Mode: Speech recognition active for keyword detection only</p>
-          </div>
-        )}
-
         <div className="recording-controls">
           <button
             onClick={isListening ? stopListening : startListening}
             className={`control-button ${isListening ? 'stop-button' : 'start-button'}`}
           >
-            🎤 {isListening ? 'Stop Listening' : 'Start Listening'}
+            🎤 {isListening ? 'Stop Speaking' : 'Start Speaking'}
           </button>
         </div>
 
@@ -595,29 +553,22 @@ function App() {
           <span>
             {isMagicActive ?
               <span style={{ fontWeight: 'bold', color: 'green' }}>🔴 Magic Active - Recording</span> :
-              <span style={{ color: 'blue' }}> Listening for "{startKeyword}"...</span>
+              <span style={{ color: 'blue' }}> Listening for keywords...</span>
             }
           </span>
         )}
 
-        {isListening && isMagicActive && (
+        {isListening && (
           <div className="listening-status">
             <h3>You're saying:</h3>
             <div className="current-transcript">
               {transcript || "Waiting for speech..."}
             </div>
-            <div className="audio-recording-indicator">
-              🔴 Audio Recording Active - Say "{endKeyword}" to stop
-            </div>
-          </div>
-        )}
-
-        {isListening && !isMagicActive && !isMobile && (
-          <div className="listening-status">
-            <h3>Current speech:</h3>
-            <div className="current-transcript">
-              {transcript || "Waiting for speech..."}
-            </div>
+            {isMagicActive && (
+              <div className="audio-recording-indicator">
+                🔴 Audio Recording Active - Say "{endKeyword}" to stop
+              </div>
+            )}
           </div>
         )}
 
