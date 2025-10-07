@@ -67,7 +67,7 @@ body {
 }
 
 .login-box h2{
-  /* color: white; */
+  color: #000;
   margin-bottom: 20px;
 }
 .login-box:hover {
@@ -312,6 +312,9 @@ body {
   .login-box {
     background: rgba(17, 24, 39, 0.95);
     border-color: rgba(255, 255, 255, 0.1);
+  }
+  .login-box h2{
+    color: white;
   }
   
   .form-group label {
