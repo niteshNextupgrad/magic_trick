@@ -42,10 +42,18 @@ const useWebSocket = (sessionId, role, callbacks = {}) => {
           if (data.type === 'summarize_complete' && role === 'magician') {
             console.log("Summary:", data?.summary);
             console.log("Topic:", data?.topic);
-
+            if (callbacks.onSummarizeComplete) callbacks.onSummarizeComplete(data);
             if (data.topic?.length > 0 && navigator.vibrate) {
               navigator.vibrate([1000, 200, 1000, 200, 1000]);
             }
+          }
+
+          if (data.type === 'diarization_error' && role === 'magician') {
+            console.error("Diarization error:", data.error);
+            if (callbacks.onDiarizationError) callbacks.onDiarizationError(data);
+          }
+          if (data.type === 'no_recording_error' && role === 'magician') {
+            if (callbacks.onRecordingError) callbacks.onRecordingError(data);
           }
 
           if (data.type === 'summary' && role === 'spectator') {
@@ -91,6 +99,8 @@ function App() {
   const [endKeyword, setEndKeyword] = useState("stop");
   const [isListening, setIsListening] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState('en');
+  const [statusMessage, setStatusMessage] = useState('Waiting for spectator to join');
+
 
   const magicActiveRef = useRef(false);
   const chunkCounterRef = useRef(0);
@@ -123,7 +133,40 @@ function App() {
       if (magicActiveRef.current) {
         setMagicSpeech(prev => prev ? prev + ' ' + text : text);
       }
+    },
+    onSummarizeComplete: (data) => {
+      console.log("Summary:", data?.summary);
+      console.log("Topic:", data?.topic);
+      if (data.topic?.length > 0) {
+        setStatusMessage(`Topic received: "${data.topic}"`);
+      }
+    },
+    onDiarizationError: (data) => {
+      const errorMessages = {
+        'no_speaker_detected': 'No speech detected in the recording. Please speak clearly and try again.',
+        'processing_failed': 'Audio processing failed. Please check your connection and try again.'
+      };
+
+      const message = errorMessages[data.error] || 'An error occurred. Please try again.';
+      setStatusMessage(`Error: ${message}`);
+
+      // Reset magic state if needed
+      if (magicActiveRef.current) {
+        magicActiveRef.current = false;
+        setIsMagicActive(false);
+      }
+    },
+    onRecordingError: (data) => {
+      const errorMessages = {
+        no_speaker_detected: 'No speech detected. Please speak clearly and try again.',
+        processing_failed: 'Audio processing failed. Please check your connection and try again.',
+        no_chunks_captured: 'No audio captured. Recording was too short or silent.'
+      };
+
+      const finalMessage = errorMessages[data.error] || data.message || 'An unknown error occurred.';
+      setStatusMessage(`${finalMessage}`);
     }
+
   };
 
   const { ws, connectionStatus } = useWebSocket(sessionId, role, wsCallbacks);
@@ -144,6 +187,8 @@ function App() {
       try {
         const data = JSON.parse(event.data);
         if (data.type === "ready" && role === "magician" && !isListening) {
+          console.log("Spactator Connect, Starting Audio mic");
+          setStatusMessage('Spectator joined, ready to start');
           startAudioCapture();
         }
         if (data.type === "summarize_complete" && role === "magician") {
@@ -244,6 +289,7 @@ function App() {
       stopAudioCapture();
       if (ws.current && ws.current.readyState === WebSocket.OPEN) {
         ws.current.send(JSON.stringify({ type: 'manual_end', sessionId, language: selectedLanguage }));
+        setStatusMessage('Waiting for topic from backend...');
       }
     } else {
       await startAudioCapture();
@@ -298,6 +344,15 @@ function App() {
           <div className={`connection-status ${connectionStatus}`}>Status: {connectionStatus}</div>
           <button className='logoutBtn' onClick={handleLogout}>Logout</button>
         </div>
+        <div className="session-status" style={{
+          margin: '20px 0',
+          padding: '15px',
+          border: '1px solid #ccc',
+          borderRadius: '8px',
+          background: '#f9f9f9'
+        }}>
+          <p><strong>Status:</strong> {statusMessage}</p>
+        </div>
 
         <SelectLanguage value={selectedLanguage} onChange={setSelectedLanguage} isListening={isListening} />
 
@@ -318,7 +373,7 @@ function App() {
             className={`control-button ${isListening ? 'stop-button' : 'start-button'}`}
             style={{ fontSize: '16px', padding: '15px 25px' }}
           >
-            {isListening ? '⏹️ Stop Listening' : '🎤 Start Listening'}
+            {isListening ? '⏹️ Stop Listening' : '🎤 Start'}
           </button>
         </div>
 
@@ -338,7 +393,7 @@ function App() {
             ) : (
               <>
                 <span style={{ color: '#1976d2', fontSize: '16px', fontWeight: 'bold' }}>Listening for: "{startKeyword}"</span>
-
+                <span>  OR</span>
                 <button
                   onClick={handleManualMagicStart}
                   className="control-button start-button"
@@ -351,7 +406,7 @@ function App() {
                     cursor: (!isListening || isMagicActive) ? 'not-allowed' : 'pointer'
                   }}
                 >
-                  Manual Start
+                  Start Listening
                 </button>
               </>
             )}
