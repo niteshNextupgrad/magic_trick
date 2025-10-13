@@ -118,6 +118,7 @@ function App() {
         magicActiveRef.current = true;
         setIsMagicActive(true);
         setMagicSpeech('');
+        setStatusMessage('Magic started — recording in progress');
       }
     },
     onEndKeyword: () => {
@@ -126,6 +127,7 @@ function App() {
         magicActiveRef.current = false;
         setIsMagicActive(false);
         stopAudioCapture();
+        setStatusMessage('Magic stopped — processing audio...');
       }
     },
     onTranscript: (text) => {
@@ -224,7 +226,7 @@ function App() {
         recorderType: RecordRTC.StereoAudioRecorder,
         numberOfAudioChannels: 1,
         desiredSampRate: 16000,
-        timeSlice: 2000,
+        timeSlice: 1000,
         ondataavailable: async (blob) => {
           chunkCounterRef.current++;
           await sendAudioChunk(blob);
@@ -289,7 +291,7 @@ function App() {
       stopAudioCapture();
       if (ws.current && ws.current.readyState === WebSocket.OPEN) {
         ws.current.send(JSON.stringify({ type: 'manual_end', sessionId, language: selectedLanguage }));
-        setStatusMessage('Waiting for topic from backend...');
+        setStatusMessage('Manual magic stopped — waiting for topic from server');
       }
     } else {
       await startAudioCapture();
@@ -297,7 +299,7 @@ function App() {
   };
   const handleManualMagicStart = () => {
     if (!isListening) {
-      alert("Please start listening first!");
+      alert("Please start Mic first!");
       return;
     }
 
@@ -310,6 +312,7 @@ function App() {
     magicActiveRef.current = true;
     setIsMagicActive(true);
     setMagicSpeech('');
+    setStatusMessage('Manual magic started — recording in progress');
 
     // Send manual start to backend
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
@@ -322,7 +325,7 @@ function App() {
 
   // Logout 
   const handleLogout = () => {
-    if (!window.confirm("Are you sure you want to logout?")) return;
+    if (!window.confirm("Are you sure, you want to logout?")) return;
     stopAudioCapture();
     window.sessionStorage.clear();
     window.location.reload();
@@ -344,13 +347,7 @@ function App() {
           <div className={`connection-status ${connectionStatus}`}>Status: {connectionStatus}</div>
           <button className='logoutBtn' onClick={handleLogout}>Logout</button>
         </div>
-        <div className="session-status" style={{
-          margin: '20px 0',
-          padding: '15px',
-          border: '1px solid #ccc',
-          borderRadius: '8px',
-          background: '#f9f9f9'
-        }}>
+        <div className="session-status">
           <p><strong>Status:</strong> {statusMessage}</p>
         </div>
 
@@ -393,7 +390,7 @@ function App() {
             ) : (
               <>
                 <span style={{ color: '#1976d2', fontSize: '16px', fontWeight: 'bold' }}>Listening for: "{startKeyword}"</span>
-                <span>  OR</span>
+                <span> ||</span>
                 <button
                   onClick={handleManualMagicStart}
                   className="control-button start-button"
