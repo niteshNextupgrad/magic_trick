@@ -131,7 +131,7 @@ function App() {
       }
     },
     onTranscript: (text) => {
-      setTranscript(text);
+      setTranscript(prev => prev ? prev + ' ' + text : text);
       if (magicActiveRef.current) {
         setMagicSpeech(prev => prev ? prev + ' ' + text : text);
       }
@@ -384,7 +384,7 @@ function App() {
           }}>
             {isMagicActive ? (
               <div>
-                <span style={{ fontWeight: 'bold', color: '#d32f2f', fontSize: '18px' }}>🔴 Magic Active - Recording</span>
+                <span style={{ fontWeight: 'bold', color: '#d32f2f', fontSize: '18px' }}>🔴 Magic Recording Active</span>
                 <p style={{ margin: '10px 0 0 0', color: '#666' }}>Say "{endKeyword}" to stop</p>
               </div>
             ) : (
@@ -412,16 +412,17 @@ function App() {
 
         {isListening && (
           <div className="listening-status">
-            <h3>Real-time Transcript:</h3>
+            <h3>Transcript:</h3>
             <div className="current-transcript" style={{ background: '#f5f5f5', padding: '15px', borderRadius: '8px', minHeight: '80px', fontSize: '16px' }}>
               {transcript || "Waiting for speech..."}
             </div>
-            {isMagicActive && magicSpeech && (
+            {/* will only show magic speech (between keywords) */}
+            {/* {isMagicActive && magicSpeech && (
               <div className="magic-speech-display" style={{ marginTop: '20px', background: '#fff3e0', padding: '15px', borderRadius: '8px', border: '2px solid #ff9800' }}>
                 <h4 style={{ color: '#e65100', marginTop: 0 }}>Magic Speech Captured:</h4>
                 <p style={{ margin: 0, fontSize: '15px' }}>{magicSpeech}</p>
               </div>
-            )}
+            )} */}
           </div>
         )}
 
