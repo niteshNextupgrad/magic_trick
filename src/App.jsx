@@ -294,6 +294,7 @@ function App() {
       if (ws.current && ws.current.readyState === WebSocket.OPEN) {
         ws.current.send(JSON.stringify({ type: 'manual_end', sessionId, language: selectedLanguage }));
         setStatusMessage('Manual magic stopped — waiting for topic from server');
+         setTranscript('');
       }
     } else {
       await startAudioCapture();
