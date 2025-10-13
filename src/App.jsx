@@ -142,6 +142,8 @@ function App() {
       if (data.topic?.length > 0) {
         setStatusMessage(`Topic received: "${data.topic}"`);
       }
+
+      setTranscript('');
     },
     onDiarizationError: (data) => {
       const errorMessages = {
