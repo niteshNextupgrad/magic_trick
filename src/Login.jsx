@@ -9,6 +9,7 @@ const LoginPage = () => {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
+    const [isLoggingIn, setIsLoggingIn] = useState(false);
 
     const handleLogin = (e) => {
         e.preventDefault();
@@ -17,6 +18,7 @@ const LoginPage = () => {
         }
 
         if (email === "admin@gmail.com" && password === "Admin@123") {
+            setIsLoggingIn(true);
             window.sessionStorage.setItem("user", JSON.stringify({ email }));
             toast.success("Login success");
             setTimeout(() => {
@@ -57,8 +59,8 @@ const LoginPage = () => {
                             />
                         </div>
 
-                        <button type="submit" className="login-button">
-                            Login
+                        <button type="submit" className="login-button" disabled={!email || !password || isLoggingIn}>
+                            {isLoggingIn ? "Logging in..." : "Login"}
                         </button>
                     </form>
                 </div>

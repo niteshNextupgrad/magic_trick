@@ -417,7 +417,7 @@ body {
 /* Share Info Section */
 .share-info {
   margin-top: 40px;
-  padding: 30px;
+  padding: 25px;
   background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%);
   border-radius: 16px;
   text-align: center;
@@ -500,8 +500,11 @@ body {
 
 /* Responsive Design */
 @media (max-width: 768px) {
+  body{
+    padding: 15px;
+  }
   .container {
-    padding: 25px;
+    padding: 20px;
   }
 
   .header h1 {
@@ -511,10 +514,6 @@ body {
   .control-button {
     padding: 15px 30px;
     font-size: 1rem;
-  }
-
-  .keyword_container {
-    grid-template-columns: 1fr;
   }
 
   .link-container {

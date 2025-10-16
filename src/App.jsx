@@ -114,6 +114,7 @@ function App() {
   const wsCallbacks = {
     onStartKeyword: () => {
       console.log("Start keyword detected!");
+      if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
       if (!magicActiveRef.current) {
         magicActiveRef.current = true;
         setIsMagicActive(true);
@@ -123,6 +124,7 @@ function App() {
     },
     onEndKeyword: () => {
       console.log("End keyword detected!");
+      if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
       if (magicActiveRef.current) {
         magicActiveRef.current = false;
         setIsMagicActive(false);
@@ -294,7 +296,7 @@ function App() {
       if (ws.current && ws.current.readyState === WebSocket.OPEN) {
         ws.current.send(JSON.stringify({ type: 'manual_end', sessionId, language: selectedLanguage }));
         setStatusMessage('Manual magic stopped — waiting for topic from server');
-         setTranscript('');
+        setTranscript('');
       }
     } else {
       await startAudioCapture();
