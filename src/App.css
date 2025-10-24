@@ -500,9 +500,6 @@ body {
 
 /* Responsive Design */
 @media (max-width: 768px) {
-  body{
-    padding: 15px;
-  }
   .container {
     padding: 20px;
   }
@@ -515,6 +512,10 @@ body {
     padding: 15px 30px;
     font-size: 1rem;
   }
+
+  /* .keyword_container {
+    grid-template-columns: 1fr;
+  } */
 
   .link-container {
     flex-direction: column;

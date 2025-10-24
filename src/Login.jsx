@@ -17,7 +17,7 @@ const LoginPage = () => {
             return setError("Please fill all required fields!");
         }
 
-        if (email === "admin@gmail.com" && password === "Admin@123") {
+        if (email.trim() === "admin@gmail.com" && password.trim() === "Admin@123") {
             setIsLoggingIn(true);
             window.sessionStorage.setItem("user", JSON.stringify({ email }));
             toast.success("Login success");

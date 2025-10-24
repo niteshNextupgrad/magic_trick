@@ -107,8 +107,29 @@ function App() {
   const recorderRef = useRef(null);
   const streamRef = useRef(null);
 
+  // IMPORTANT: Store keywords in refs to always use latest values
+  const startKeywordRef = useRef(startKeyword);
+  const endKeywordRef = useRef(endKeyword);
+  const selectedLanguageRef = useRef(selectedLanguage);
+
   // const BASE_URL = 'http://localhost:3001/api';
   const BASE_URL = 'https://magix-trix.onrender.com/api';
+
+  // Update refs when keywords change
+  useEffect(() => {
+    startKeywordRef.current = startKeyword;
+    console.log("Start keyword updated to:", startKeyword);
+  }, [startKeyword]);
+
+  useEffect(() => {
+    endKeywordRef.current = endKeyword;
+    console.log("End keyword updated to:", endKeyword);
+  }, [endKeyword]);
+
+  useEffect(() => {
+    selectedLanguageRef.current = selectedLanguage;
+    console.log("Language updated to:", selectedLanguage);
+  }, [selectedLanguage]);
 
   // WebSocket Callbacks
   const wsCallbacks = {
@@ -133,6 +154,7 @@ function App() {
       }
     },
     onTranscript: (text) => {
+      if (!text || text.split(' ').length < 2) return;
       setTranscript(prev => prev ? prev + ' ' + text : text);
       if (magicActiveRef.current) {
         setMagicSpeech(prev => prev ? prev + ' ' + text : text);
@@ -150,7 +172,8 @@ function App() {
     onDiarizationError: (data) => {
       const errorMessages = {
         'no_speaker_detected': 'No speech detected in the recording. Please speak clearly and try again.',
-        'processing_failed': 'Audio processing failed. Please check your connection and try again.'
+        'processing_failed': 'Audio processing failed. Please check your connection and try again.',
+        'deepgram_error': 'Transcription service error. Please try again.'
       };
 
       const message = errorMessages[data.error] || 'An error occurred. Please try again.';
@@ -166,11 +189,18 @@ function App() {
       const errorMessages = {
         no_speaker_detected: 'No speech detected. Please speak clearly and try again.',
         processing_failed: 'Audio processing failed. Please check your connection and try again.',
-        no_chunks_captured: 'No audio captured. Recording was too short or silent.'
+        no_chunks_captured: 'No audio captured. Recording was too short or silent.',
+        magic_not_started: 'Magic was never started. Please use the start button or keyword.'
       };
 
       const finalMessage = errorMessages[data.error] || data.message || 'An unknown error occurred.';
-      setStatusMessage(`${finalMessage}`);
+      setStatusMessage(`Error: ${finalMessage}`);
+
+      // Reset magic state
+      if (magicActiveRef.current) {
+        magicActiveRef.current = false;
+        setIsMagicActive(false);
+      }
     }
 
   };
@@ -186,6 +216,7 @@ function App() {
       setSessionId(sessionParam);
     }
   }, []);
+
   useEffect(() => {
     if (!ws.current) return;
 
@@ -193,7 +224,7 @@ function App() {
       try {
         const data = JSON.parse(event.data);
         if (data.type === "ready" && role === "magician" && !isListening) {
-          console.log("Spactator Connect, Starting Audio mic");
+          console.log("Spectator Connected, Starting Audio mic");
           setStatusMessage('Spectator joined, ready to start');
           startAudioCapture();
         }
@@ -213,6 +244,8 @@ function App() {
   const startAudioCapture = async () => {
     try {
       console.log("Starting RecordRTC capture...");
+      console.log("Current keywords - Start:", startKeywordRef.current, "End:", endKeywordRef.current);
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -230,7 +263,7 @@ function App() {
         recorderType: RecordRTC.StereoAudioRecorder,
         numberOfAudioChannels: 1,
         desiredSampRate: 16000,
-        timeSlice: 1000,
+        timeSlice: 1500,
         ondataavailable: async (blob) => {
           chunkCounterRef.current++;
           await sendAudioChunk(blob);
@@ -262,18 +295,18 @@ function App() {
     }
   };
 
-  // Send Chunk 
+  // Send Chunk - ALWAYS use refs for latest keyword values
   const sendAudioChunk = async (blob) => {
     try {
       const formData = new FormData();
       formData.append('audio', blob, `chunk_${chunkCounterRef.current}_${Date.now()}.wav`);
       formData.append('sessionId', sessionId);
-      formData.append('startKeyword', startKeyword);
-      formData.append('endKeyword', endKeyword);
+      // IMPORTANT: Always use ref values to get latest keywords
+      formData.append('startKeyword', startKeywordRef.current);
+      formData.append('endKeyword', endKeywordRef.current);
       formData.append('isMagicActive', magicActiveRef.current);
       formData.append('chunkNumber', chunkCounterRef.current);
-      formData.append('language', selectedLanguage);
-
+      formData.append('language', selectedLanguageRef.current);
 
       await axios.post(`${BASE_URL}/process-audio-chunk`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -294,7 +327,11 @@ function App() {
       }
       stopAudioCapture();
       if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-        ws.current.send(JSON.stringify({ type: 'manual_end', sessionId, language: selectedLanguage }));
+        ws.current.send(JSON.stringify({
+          type: 'manual_end',
+          sessionId,
+          language: selectedLanguageRef.current
+        }));
         setStatusMessage('Manual magic stopped — waiting for topic from server');
         setTranscript('');
       }
@@ -302,6 +339,7 @@ function App() {
       await startAudioCapture();
     }
   };
+
   const handleManualMagicStart = () => {
     if (!isListening) {
       alert("Please start Mic first!");
@@ -314,16 +352,21 @@ function App() {
     }
 
     console.log("Manual magic start triggered");
+    console.log("Using keywords - Start:", startKeywordRef.current, "End:", endKeywordRef.current);
+
     magicActiveRef.current = true;
     setIsMagicActive(true);
     setMagicSpeech('');
     setStatusMessage('Manual magic started — recording in progress');
 
-    // Send manual start to backend
+    // Send manual start to backend with keywords
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
       ws.current.send(JSON.stringify({
         type: 'manual_start',
-        sessionId
+        sessionId,
+        startKeyword: startKeywordRef.current,
+        endKeyword: endKeywordRef.current,
+        language: selectedLanguageRef.current
       }));
     }
   };
@@ -361,13 +404,38 @@ function App() {
         <div className='keyword_container'>
           <div>
             <label>Start Keyword:</label>
-            <input type="text" value={startKeyword} onChange={e => setStartKeyword(e.target.value)} disabled={isListening} />
+            <input
+              type="text"
+              value={startKeyword}
+              onChange={e => setStartKeyword(e.target.value)}
+              disabled={isListening}
+              placeholder="e.g., start, begin, go"
+            />
           </div>
           <div>
             <label>End Keyword:</label>
-            <input type="text" value={endKeyword} onChange={e => setEndKeyword(e.target.value)} disabled={isListening} />
+            <input
+              type="text"
+              value={endKeyword}
+              onChange={e => setEndKeyword(e.target.value)}
+              disabled={isListening}
+              placeholder="e.g., stop, end, finish"
+            />
           </div>
         </div>
+
+        {isListening && (
+          <div style={{
+            background: '#e8f5e9',
+            padding: '10px',
+            borderRadius: '5px',
+            marginBottom: '10px',
+            fontSize: '14px',
+            color: '#2e7d32'
+          }}>
+            <strong>Active Keywords:</strong> Start: "{startKeyword}" | End: "{endKeyword}"
+          </div>
+        )}
 
         <div className="recording-controls">
           <button
@@ -375,7 +443,7 @@ function App() {
             className={`control-button ${isListening ? 'stop-button' : 'start-button'}`}
             style={{ fontSize: '16px', padding: '15px 25px' }}
           >
-            {isListening ? '⏹️ Stop' : '🎤 Start'}
+            {isListening ? '⏹️ Stop Mic' : '🎤 Start Mic'}
           </button>
         </div>
 
@@ -395,7 +463,7 @@ function App() {
             ) : (
               <>
                 <span style={{ color: '#1976d2', fontSize: '16px', fontWeight: 'bold' }}>Listening for: "{startKeyword}"</span>
-                <span> ||</span>
+                <span style={{ margin: '0 10px' }}>||</span>
                 <button
                   onClick={handleManualMagicStart}
                   className="control-button start-button"
@@ -403,12 +471,11 @@ function App() {
                   style={{
                     fontSize: '12px',
                     padding: '10px 15px',
-                    marginLeft: '10px',
                     opacity: (!isListening || isMagicActive) ? 0.5 : 1,
                     cursor: (!isListening || isMagicActive) ? 'not-allowed' : 'pointer'
                   }}
                 >
-                  Start Listening
+                  🎯 Start Magic Manually
                 </button>
               </>
             )}
@@ -417,17 +484,18 @@ function App() {
 
         {isListening && (
           <div className="listening-status">
-            <h3>Transcript:</h3>
-            <div className="current-transcript" style={{ background: '#f5f5f5', padding: '15px', borderRadius: '8px', minHeight: '80px', fontSize: '16px' }}>
+            <h3>Live Transcript:</h3>
+            <div className="current-transcript" style={{
+              background: '#f5f5f5',
+              padding: '15px',
+              borderRadius: '8px',
+              minHeight: '80px',
+              fontSize: '16px',
+              maxHeight: '200px',
+              overflowY: 'auto'
+            }}>
               {transcript || "Waiting for speech..."}
             </div>
-            {/* will only show magic speech (between keywords) */}
-            {/* {isMagicActive && magicSpeech && (
-              <div className="magic-speech-display" style={{ marginTop: '20px', background: '#fff3e0', padding: '15px', borderRadius: '8px', border: '2px solid #ff9800' }}>
-                <h4 style={{ color: '#e65100', marginTop: 0 }}>Magic Speech Captured:</h4>
-                <p style={{ margin: 0, fontSize: '15px' }}>{magicSpeech}</p>
-              </div>
-            )} */}
           </div>
         )}
 
@@ -436,13 +504,21 @@ function App() {
           <div className="link-container">
             <input type="text" value={getSpectatorLink()} readOnly />
             <button
-              onClick={() => { navigator.clipboard.writeText(getSpectatorLink()); setIsCopied(true); setTimeout(() => setIsCopied(false), 2000); }}
+              onClick={() => {
+                navigator.clipboard.writeText(getSpectatorLink());
+                setIsCopied(true);
+                setTimeout(() => setIsCopied(false), 2000);
+              }}
               className="copy-button"
             >
-              {isCopied ? 'Copied' : "Copy"}
+              {isCopied ? '✓ Copied' : "📋 Copy"}
             </button>
           </div>
-          <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(getSpectatorLink())}`} alt="Spectator QR Code" style={{ marginTop: '15px' }} />
+          <img
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(getSpectatorLink())}`}
+            alt="Spectator QR Code"
+            style={{ marginTop: '15px' }}
+          />
         </div>
       </div>
     );
@@ -454,6 +530,14 @@ function App() {
         <div className="header">
           <h1>Magic Session</h1>
           <div className={`connection-status ${connectionStatus}`}>Status: {connectionStatus}</div>
+        </div>
+        <div style={{ padding: '20px', textAlign: 'center' }}>
+          <p style={{ fontSize: '18px', color: '#666' }}>
+            Waiting for the magician to perform magic...
+          </p>
+          <p style={{ fontSize: '14px', color: '#999', marginTop: '10px' }}>
+            You will be automatically redirected when a topic is detected.
+          </p>
         </div>
       </div>
     );
