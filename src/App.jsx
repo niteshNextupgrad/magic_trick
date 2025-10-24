@@ -118,17 +118,17 @@ function App() {
   // Update refs when keywords change
   useEffect(() => {
     startKeywordRef.current = startKeyword;
-    console.log("Start keyword updated to:", startKeyword);
+    // console.log("Start keyword updated to:", startKeyword);
   }, [startKeyword]);
 
   useEffect(() => {
     endKeywordRef.current = endKeyword;
-    console.log("End keyword updated to:", endKeyword);
+    // console.log("End keyword updated to:", endKeyword);
   }, [endKeyword]);
 
   useEffect(() => {
     selectedLanguageRef.current = selectedLanguage;
-    console.log("Language updated to:", selectedLanguage);
+    // console.log("Language updated to:", selectedLanguage);
   }, [selectedLanguage]);
 
   // WebSocket Callbacks
