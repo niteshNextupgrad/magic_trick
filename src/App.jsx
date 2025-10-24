@@ -535,9 +535,9 @@ function App() {
           <p style={{ fontSize: '18px', color: '#666' }}>
             Waiting for the magician to perform magic...
           </p>
-          <p style={{ fontSize: '14px', color: '#999', marginTop: '10px' }}>
+          {/* <p style={{ fontSize: '14px', color: '#999', marginTop: '10px' }}>
             You will be automatically redirected when a topic is detected.
-          </p>
+          </p> */}
         </div>
       </div>
     );
