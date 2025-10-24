@@ -443,7 +443,7 @@ function App() {
             className={`control-button ${isListening ? 'stop-button' : 'start-button'}`}
             style={{ fontSize: '16px', padding: '15px 25px' }}
           >
-            {isListening ? '⏹️ Stop Mic' : '🎤 Start Mic'}
+            {isListening ? '⏹️ Stop' : '🎤 Start Mic'}
           </button>
         </div>
 
