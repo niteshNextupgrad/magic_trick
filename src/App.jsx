@@ -475,7 +475,7 @@ function App() {
                     cursor: (!isListening || isMagicActive) ? 'not-allowed' : 'pointer'
                   }}
                 >
-                  🎯 Start Magic Manually
+                  Start Manually
                 </button>
               </>
             )}
