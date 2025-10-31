@@ -391,7 +391,7 @@ function App() {
     return (
       <div className="container magician-view">
         <div className="header">
-          <h1>Magic Session</h1>
+          <h1>Inject Voice Recognition</h1>
           <div className={`connection-status ${connectionStatus}`}>Status: {connectionStatus}</div>
           <button className='logoutBtn' onClick={handleLogout}>Logout</button>
         </div>
@@ -528,7 +528,7 @@ function App() {
     return (
       <div className="container center spectator-view">
         <div className="header">
-          <h1>Magic Session</h1>
+          <h1>Inject Voice Recognition</h1>
           <div className={`connection-status ${connectionStatus}`}>Status: {connectionStatus}</div>
         </div>
         <div style={{ padding: '20px', textAlign: 'center' }}>
