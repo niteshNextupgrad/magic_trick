@@ -4,6 +4,7 @@ import LoginPage from './Login';
 import axios from 'axios';
 import RecordRTC from 'recordrtc';
 import SelectLanguage from './SelectLanguage';
+import CustomInput from './CustomInput';
 
 // WebSocket Hook 
 const useWebSocket = (sessionId, role, callbacks = {}) => {
@@ -38,6 +39,10 @@ const useWebSocket = (sessionId, role, callbacks = {}) => {
           }
 
           if (data.type === 'transcript' && callbacks.onTranscript) callbacks.onTranscript(data.text);
+
+          if (data.type === 'magic_transcript' && callbacks.onMagicTranscript) {
+            callbacks.onMagicTranscript(data.text);
+          }
 
           if (data.type === 'summarize_complete' && role === 'magician') {
             console.log("Summary:", data?.summary);
@@ -100,6 +105,8 @@ function App() {
   const [isListening, setIsListening] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState('en');
   const [statusMessage, setStatusMessage] = useState('Waiting for spectator to join');
+  const [fullMagicTranscript, setFullMagicTranscript] = useState('');
+
   const [showSettings, setShowSettings] = useState(false);
 
   const magicActiveRef = useRef(false);
@@ -157,6 +164,11 @@ function App() {
       if (magicActiveRef.current) {
         setMagicSpeech(prev => prev ? prev + ' ' + text : text);
       }
+    },
+
+    onMagicTranscript: (text) => {
+      console.log("Full Magic Transcript Received:", text);
+      setFullMagicTranscript(text);
     },
     onSummarizeComplete: (data) => {
       console.log("Summary:", data?.summary);
@@ -252,6 +264,7 @@ function App() {
       });
       streamRef.current = stream;
       setIsListening(true);
+      setFullMagicTranscript('');
       chunkCounterRef.current = 0;
 
       const recorder = new RecordRTC(stream, {
@@ -390,7 +403,7 @@ function App() {
           <h1>Inject Voice Recognition</h1>
           <div className="header-controls">
             <div className={`connection-status ${connectionStatus}`}>Status: {connectionStatus}</div>
-            <button 
+            <button
               className="settings-button"
               onClick={() => setShowSettings(!showSettings)}
               title="Settings"
@@ -406,38 +419,37 @@ function App() {
           <div className="settings-panel">
             <div className="settings-header">
               <h3>Settings</h3>
-              <button 
+              <button
                 className="close-settings"
                 onClick={() => setShowSettings(false)}
               >
                 ✕
               </button>
             </div>
-            
+
             <SelectLanguage value={selectedLanguage} onChange={setSelectedLanguage} isListening={isListening} />
 
             <div className='keyword_container'>
               <div>
                 <label>Start Keyword:</label>
-                <input
-                  type="text"
+                <CustomInput
                   value={startKeyword}
-                  onChange={e => setStartKeyword(e.target.value)}
-                  disabled={isListening}
+                  onChange={setStartKeyword}
                   placeholder="e.g., start, begin, go"
+                  disabled={isListening}
                 />
               </div>
               <div>
                 <label>End Keyword:</label>
-                <input
-                  type="text"
+                <CustomInput
                   value={endKeyword}
-                  onChange={e => setEndKeyword(e.target.value)}
-                  disabled={isListening}
+                  onChange={setEndKeyword}
                   placeholder="e.g., stop, end, finish"
+                  disabled={isListening}
                 />
               </div>
             </div>
+
 
             {isListening && (
               <div className="active-keywords-display">
@@ -494,12 +506,13 @@ function App() {
             </div>
           )}
 
-          {/* {!isListening && magicSpeech && (
+          {!isListening && fullMagicTranscript && (
             <div className="magic-speech-display">
-              <h4>Magic Session Speech</h4>
-              <p>{magicSpeech}</p>
+              <h3>Magic Transcript:</h3>
+              <p>{fullMagicTranscript}</p>
             </div>
-          )} */}
+          )}
+
         </div>
 
         <div className="share-info">

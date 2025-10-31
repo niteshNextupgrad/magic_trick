@@ -218,28 +218,42 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
-
-.keyword_container input {
+.keyword-input {
   padding: 12px 16px;
   border: 2px solid #ddd;
   border-radius: 10px;
   font-size: 1rem;
   transition: all 0.3s ease;
   background: white;
+  min-height: 20px;
+  outline: none;
 }
 
-.keyword_container input:focus {
-  outline: none;
+/* Placeholder support */
+.keyword-input[data-placeholder]:empty:before {
+  content: attr(data-placeholder);
+  color: #aaa;
+  pointer-events: none;
+}
+
+/* Focus style */
+.keyword-input:focus {
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
   transform: translateY(-1px);
 }
 
-.keyword_container input:disabled {
+/* Disabled style */
+.keyword-input[contenteditable="false"] {
   background: #f5f5f5;
   cursor: not-allowed;
   opacity: 0.7;
 }
+.keyword-input {
+  direction: ltr;
+  unicode-bidi: plaintext;
+}
+
 
 /* Recording Controls */
 .recording-controls {
