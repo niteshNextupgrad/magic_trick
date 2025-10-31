@@ -5,7 +5,7 @@ import axios from 'axios';
 import RecordRTC from 'recordrtc';
 import SelectLanguage from './SelectLanguage';
 
-//  WebSocket Hook 
+// WebSocket Hook 
 const useWebSocket = (sessionId, role, callbacks = {}) => {
   const ws = useRef(null);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
@@ -100,7 +100,7 @@ function App() {
   const [isListening, setIsListening] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState('en');
   const [statusMessage, setStatusMessage] = useState('Waiting for spectator to join');
-
+  const [showSettings, setShowSettings] = useState(false);
 
   const magicActiveRef = useRef(false);
   const chunkCounterRef = useRef(0);
@@ -123,12 +123,10 @@ function App() {
 
   useEffect(() => {
     endKeywordRef.current = endKeyword;
-    // console.log("End keyword updated to:", endKeyword);
   }, [endKeyword]);
 
   useEffect(() => {
     selectedLanguageRef.current = selectedLanguage;
-    // console.log("Language updated to:", selectedLanguage);
   }, [selectedLanguage]);
 
   // WebSocket Callbacks
@@ -202,7 +200,6 @@ function App() {
         setIsMagicActive(false);
       }
     }
-
   };
 
   const { ws, connectionStatus } = useWebSocket(sessionId, role, wsCallbacks);
@@ -301,7 +298,6 @@ function App() {
       const formData = new FormData();
       formData.append('audio', blob, `chunk_${chunkCounterRef.current}_${Date.now()}.wav`);
       formData.append('sessionId', sessionId);
-      // IMPORTANT: Always use ref values to get latest keywords
       formData.append('startKeyword', startKeywordRef.current);
       formData.append('endKeyword', endKeywordRef.current);
       formData.append('isMagicActive', magicActiveRef.current);
@@ -317,7 +313,7 @@ function App() {
     }
   };
 
-  // Toggle Listening
+  // Toggle Listening (unchanged)
   const handleListeningToggle = async () => {
     if (isListening) {
       console.log("Manual stop triggered");
@@ -392,112 +388,119 @@ function App() {
       <div className="container magician-view">
         <div className="header">
           <h1>Inject Voice Recognition</h1>
-          <div className={`connection-status ${connectionStatus}`}>Status: {connectionStatus}</div>
-          <button className='logoutBtn' onClick={handleLogout}>Logout</button>
-        </div>
-        <div className="session-status">
-          <p><strong>Status:</strong> {statusMessage}</p>
-        </div>
-
-        <SelectLanguage value={selectedLanguage} onChange={setSelectedLanguage} isListening={isListening} />
-
-        <div className='keyword_container'>
-          <div>
-            <label>Start Keyword:</label>
-            <input
-              type="text"
-              value={startKeyword}
-              onChange={e => setStartKeyword(e.target.value)}
-              disabled={isListening}
-              placeholder="e.g., start, begin, go"
-            />
-          </div>
-          <div>
-            <label>End Keyword:</label>
-            <input
-              type="text"
-              value={endKeyword}
-              onChange={e => setEndKeyword(e.target.value)}
-              disabled={isListening}
-              placeholder="e.g., stop, end, finish"
-            />
+          <div className="header-controls">
+            <div className={`connection-status ${connectionStatus}`}>Status: {connectionStatus}</div>
+            <button 
+              className="settings-button"
+              onClick={() => setShowSettings(!showSettings)}
+              title="Settings"
+            >
+              ⚙️
+            </button>
+            <button className='logoutBtn' onClick={handleLogout}>Logout</button>
           </div>
         </div>
 
-        {isListening && (
-          <div style={{
-            background: '#e8f5e9',
-            padding: '10px',
-            borderRadius: '5px',
-            marginBottom: '10px',
-            fontSize: '14px',
-            color: '#2e7d32'
-          }}>
-            <strong>Active Keywords:</strong> Start: "{startKeyword}" | End: "{endKeyword}"
-          </div>
-        )}
+        {/* Settings Panel */}
+        {showSettings && (
+          <div className="settings-panel">
+            <div className="settings-header">
+              <h3>Settings</h3>
+              <button 
+                className="close-settings"
+                onClick={() => setShowSettings(false)}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <SelectLanguage value={selectedLanguage} onChange={setSelectedLanguage} isListening={isListening} />
 
-        <div className="recording-controls">
-          <button
-            onClick={handleListeningToggle}
-            className={`control-button ${isListening ? 'stop-button' : 'start-button'}`}
-            style={{ fontSize: '16px', padding: '15px 25px' }}
-          >
-            {isListening ? '⏹️ Stop' : '🎤 Start Mic'}
-          </button>
-        </div>
-
-        {isListening && (
-          <div className="status-indicator" style={{
-            background: isMagicActive ? '#ffebee' : '#e3f2fd',
-            padding: '20px',
-            borderRadius: '8px',
-            margin: '20px 0',
-            border: `2px solid ${isMagicActive ? '#f44336' : '#2196f3'}`
-          }}>
-            {isMagicActive ? (
+            <div className='keyword_container'>
               <div>
-                <span style={{ fontWeight: 'bold', color: '#d32f2f', fontSize: '18px' }}>🔴 Magic Recording Active</span>
-                <p style={{ margin: '10px 0 0 0', color: '#666' }}>Say "{endKeyword}" to stop</p>
+                <label>Start Keyword:</label>
+                <input
+                  type="text"
+                  value={startKeyword}
+                  onChange={e => setStartKeyword(e.target.value)}
+                  disabled={isListening}
+                  placeholder="e.g., start, begin, go"
+                />
               </div>
-            ) : (
-              <>
-                <span style={{ color: '#1976d2', fontSize: '16px', fontWeight: 'bold' }}>Listening for: "{startKeyword}"</span>
-                <span style={{ margin: '0 10px' }}>||</span>
-                <button
-                  onClick={handleManualMagicStart}
-                  className="control-button start-button"
-                  disabled={!isListening || isMagicActive}
-                  style={{
-                    fontSize: '12px',
-                    padding: '10px 15px',
-                    opacity: (!isListening || isMagicActive) ? 0.5 : 1,
-                    cursor: (!isListening || isMagicActive) ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  Start Manually
-                </button>
-              </>
+              <div>
+                <label>End Keyword:</label>
+                <input
+                  type="text"
+                  value={endKeyword}
+                  onChange={e => setEndKeyword(e.target.value)}
+                  disabled={isListening}
+                  placeholder="e.g., stop, end, finish"
+                />
+              </div>
+            </div>
+
+            {isListening && (
+              <div className="active-keywords-display">
+                <strong>Active Keywords:</strong> Start: "{startKeyword}" | End: "{endKeyword}"
+              </div>
             )}
           </div>
         )}
 
-        {isListening && (
-          <div className="listening-status">
-            <h3>Live Transcript:</h3>
-            <div className="current-transcript" style={{
-              background: '#f5f5f5',
-              padding: '15px',
-              borderRadius: '8px',
-              minHeight: '80px',
-              fontSize: '16px',
-              maxHeight: '200px',
-              overflowY: 'auto'
-            }}>
-              {transcript || "Waiting for speech..."}
-            </div>
+        <div className="session-status">
+          <p><strong>Status:</strong> {statusMessage}</p>
+        </div>
+
+        {/* Main Content Area */}
+        <div className="main-content">
+          <div className="recording-controls">
+            <button
+              onClick={handleListeningToggle}
+              className={`control-button ${isListening ? 'stop-button' : 'start-button'}`}
+              style={{ fontSize: '18px', padding: '20px 40px' }}
+            >
+              {isListening ? '⏹️ Stop Recording' : '🎤 Start Recording'}
+            </button>
           </div>
-        )}
+
+          {isListening && (
+            <div className="status-indicator">
+              {isMagicActive ? (
+                <div className="magic-active">
+                  <span className="magic-active-text">🔴 Magic Recording Active</span>
+                  <p className="magic-hint">Say "{endKeyword}" to stop</p>
+                </div>
+              ) : (
+                <div className="listening-mode">
+                  <span className="listening-text">🔵 Listening for: "{startKeyword}"</span>
+                  <button
+                    onClick={handleManualMagicStart}
+                    className="control-button start-button manual-start-btn"
+                    disabled={!isListening || isMagicActive}
+                  >
+                    Start Manually
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {isListening && (
+            <div className="listening-status">
+              <h3>Live Transcript</h3>
+              <div className="current-transcript">
+                {transcript || "Waiting for speech..."}
+              </div>
+            </div>
+          )}
+
+          {magicSpeech && (
+            <div className="magic-speech-display">
+              <h4>Magic Session Speech</h4>
+              <p>{magicSpeech}</p>
+            </div>
+          )}
+        </div>
 
         <div className="share-info">
           <p>Share this link with the spectator:</p>
@@ -535,9 +538,6 @@ function App() {
           <p style={{ fontSize: '18px', color: '#666' }}>
             Waiting for the magician to perform magic...
           </p>
-          {/* <p style={{ fontSize: '14px', color: '#999', marginTop: '10px' }}>
-            You will be automatically redirected when a topic is detected.
-          </p> */}
         </div>
       </div>
     );

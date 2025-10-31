@@ -86,7 +86,7 @@ body {
 
 /* Logout Button */
 .logoutBtn {
-  padding: 10px 24px;
+  padding: 10px 20px;
   background-color: red;
   color: white;
   border: none;
@@ -572,4 +572,286 @@ input:focus {
 ::selection {
   background: #667eea;
   color: white;
+}
+
+
+
+/* Header Controls */
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+/* Settings Button */
+.settings-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.settings-button:hover {
+  transform: rotate(90deg) scale(1.1);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+/* Settings Panel */
+.settings-panel {
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  border-radius: 16px;
+  padding: 25px;
+  margin: 20px 0;
+  border: 2px solid #e0e0e0;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #ddd;
+}
+
+.settings-header h3 {
+  margin: 0;
+  color: #333;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.close-settings {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #666;
+  padding: 5px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.close-settings:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: #333;
+}
+
+/* Active Keywords Display */
+.active-keywords-display {
+  background: #e8f5e9;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #2e7d32;
+  border-left: 4px solid #4caf50;
+  margin-top: 15px;
+}
+
+/* Main Content Area */
+.main-content {
+  margin: 30px 0;
+}
+
+/* Enhanced Status Indicator */
+.status-indicator {
+  background: #e3f2fd;
+  padding: 25px;
+  border-radius: 16px;
+  margin: 25px 0;
+  border: 2px solid #2196f3;
+  text-align: center;
+}
+
+.magic-active {
+  text-align: center;
+}
+
+.magic-active-text {
+  font-weight: bold;
+  color: #d32f2f;
+  font-size: 1.3rem;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.magic-hint {
+  margin: 10px 0 0 0;
+  color: #666;
+  font-size: 1rem;
+}
+
+.listening-mode {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.listening-text {
+  color: #1976d2;
+  font-size: 1.1rem;
+  font-weight: bold;
+}
+
+.manual-start-btn {
+  font-size: 14px !important;
+  padding: 12px 20px !important;
+  opacity: 1 !important;
+  cursor: pointer !important;
+}
+
+.manual-start-btn:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+/* Enhanced Transcript Display */
+.listening-status {
+  margin: 30px 0;
+}
+
+.listening-status h3 {
+  color: #333;
+  margin-bottom: 15px;
+  font-size: 1.4rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.current-transcript {
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  padding: 25px;
+  border-radius: 16px;
+  min-height: 150px;
+  font-size: 1.1rem;
+  line-height: 1.7;
+  color: #333;
+  border-left: 6px solid #667eea;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.current-transcript:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+/* Magic Speech Display */
+.magic-speech-display {
+  margin: 25px 0;
+  background: linear-gradient(135deg, #fff3e0 0%, #ffe082 100%);
+  padding: 25px;
+  border-radius: 16px;
+  border-left: 6px solid #ff9800;
+  box-shadow: 0 6px 20px rgba(255, 152, 0, 0.2);
+  animation: slideIn 0.5s ease;
+}
+
+.magic-speech-display h4 {
+  color: #e65100;
+  margin-bottom: 15px;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.magic-speech-display p {
+  color: #333;
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
+
+/* Enhanced Recording Controls */
+.recording-controls {
+  display: flex;
+  justify-content: center;
+  margin: 40px 0;
+}
+
+.control-button {
+  padding: 25px 50px;
+  font-size: 1.3rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  letter-spacing: 1px;
+  position: relative;
+  overflow: hidden;
+  min-width: 200px;
+}
+
+/* Responsive Design Updates */
+@media (max-width: 768px) {
+  .header-controls {
+    gap: 10px;
+  }
+
+  .settings-button {
+    width: 40px;
+    height: 40px;
+    font-size: 1.1rem;
+  }
+
+  .listening-mode {
+    flex-direction: column;
+    gap: 15px;
+    text-align: center;
+  }
+
+  .control-button {
+    padding: 20px 30px;
+    font-size: 1.1rem;
+    min-width: 180px;
+  }
+
+  .current-transcript {
+    padding: 20px;
+    font-size: 1rem;
+  }
+
+  .settings-panel {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .control-button {
+    padding: 18px 25px;
+    font-size: 1rem;
+    min-width: 160px;
+  }
+
+  .magic-active-text {
+    font-size: 1.1rem;
+  }
+
+  .listening-text {
+    font-size: 1rem;
+  }
 }
