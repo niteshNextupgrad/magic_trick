@@ -114,7 +114,7 @@ function App() {
   const recorderRef = useRef(null);
   const streamRef = useRef(null);
 
-  // IMPORTANT: Store keywords in refs to always use latest values
+  // Store keywords in refs to always use latest values
   const startKeywordRef = useRef(startKeyword);
   const endKeywordRef = useRef(endKeyword);
   const selectedLanguageRef = useRef(selectedLanguage);
@@ -403,7 +403,7 @@ function App() {
           <h1>Inject Voice Recognition</h1>
           <div className="header-controls">
             <div className={`connection-status ${connectionStatus}`}>Status: {connectionStatus}</div>
-            <button className='logoutBtn' onClick={handleLogout} title='Logout'><LogOut color="white" size={20} /></button>
+            <button className='logoutBtn' onClick={handleLogout} title='Logout'><LogOut color="white" size={20} strokeWidth={3}/></button>
             <button
               className="settings-button"
               onClick={() => setShowSettings(!showSettings)}
