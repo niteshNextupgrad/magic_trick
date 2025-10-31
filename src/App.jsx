@@ -4,7 +4,7 @@ import LoginPage from './Login';
 import axios from 'axios';
 import RecordRTC from 'recordrtc';
 import SelectLanguage from './SelectLanguage';
-import CustomInput from './CustomInput';
+import { Clipboard, LogOut, Mic, Settings, SquareStop, X } from 'lucide-react';
 
 // WebSocket Hook 
 const useWebSocket = (sessionId, role, callbacks = {}) => {
@@ -403,14 +403,14 @@ function App() {
           <h1>Inject Voice Recognition</h1>
           <div className="header-controls">
             <div className={`connection-status ${connectionStatus}`}>Status: {connectionStatus}</div>
+            <button className='logoutBtn' onClick={handleLogout} title='Logout'><LogOut color="white" size={20} /></button>
             <button
               className="settings-button"
               onClick={() => setShowSettings(!showSettings)}
               title="Settings"
             >
-              ⚙️
+              <Settings color="white" size={24} />
             </button>
-            <button className='logoutBtn' onClick={handleLogout}>Logout</button>
           </div>
         </div>
 
@@ -423,33 +423,29 @@ function App() {
                 className="close-settings"
                 onClick={() => setShowSettings(false)}
               >
-                ✕
+                <X color='black' />
               </button>
             </div>
 
             <SelectLanguage value={selectedLanguage} onChange={setSelectedLanguage} isListening={isListening} />
 
             <div className='keyword_container'>
-              <div>
-                <label>Start Keyword:</label>
-                <CustomInput
+              <div> <label>Start Keyword:</label>
+                <input type="text"
                   value={startKeyword}
-                  onChange={setStartKeyword}
-                  placeholder="e.g., start, begin, go"
+                  onChange={e => setStartKeyword(e.target.value)}
                   disabled={isListening}
-                />
+                  placeholder="e.g., start, begin, go" />
               </div>
               <div>
                 <label>End Keyword:</label>
-                <CustomInput
+                <input type="text"
                   value={endKeyword}
-                  onChange={setEndKeyword}
-                  placeholder="e.g., stop, end, finish"
+                  onChange={e => setEndKeyword(e.target.value)}
                   disabled={isListening}
-                />
+                  placeholder="e.g., stop, end, finish" />
               </div>
             </div>
-
 
             {isListening && (
               <div className="active-keywords-display">
@@ -469,9 +465,9 @@ function App() {
             <button
               onClick={handleListeningToggle}
               className={`control-button ${isListening ? 'stop-button' : 'start-button'}`}
-              style={{ fontSize: '18px', padding: '20px 40px' }}
+              style={{ fontSize: '18px', padding: '20px 40px', display: 'flex', alignItems: 'center', gap: '10px' }}
             >
-              {isListening ? '⏹️ Stop Recording' : '🎤 Start Recording'}
+              {isListening ? <><SquareStop />Stop Recording</> : <><Mic />Start Recording</>}
             </button>
           </div>
 
@@ -479,7 +475,7 @@ function App() {
             <div className="status-indicator">
               {isMagicActive ? (
                 <div className="magic-active">
-                  <span className="magic-active-text">🔴 Magic Recording Active</span>
+                  <span className="magic-active-text">Magic Recording Active</span>
                   <p className="magic-hint">Say "{endKeyword}" to stop</p>
                 </div>
               ) : (
@@ -527,7 +523,7 @@ function App() {
               }}
               className="copy-button"
             >
-              {isCopied ? '✓ Copied' : "📋 Copy"}
+              {isCopied ? 'Copied' : <><Clipboard size={16} /> Copy</>}
             </button>
           </div>
           <img

@@ -86,12 +86,12 @@ body {
 
 /* Logout Button */
 .logoutBtn {
-  padding: 10px 20px;
+  padding: 5px 10px;
   background-color: red;
   color: white;
   border: none;
-  border-radius: 12px;
-  font-weight: 600;
+  border-radius: 6px;
+  font-weight: bold;
   cursor: pointer;
   transition: all 0.3s ease;
 }
@@ -183,6 +183,28 @@ body {
   border-radius: 16px;
 }
 
+.keyword_container input {
+  padding: 12px 16px;
+  border: 2px solid #ddd;
+  border-radius: 10px;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  background: white;
+}
+
+.keyword_container input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  transform: translateY(-1px);
+}
+
+.keyword_container input:disabled {
+  background: #f5f5f5;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 /* session-status  */
 .session-status {
   margin: 20px 0;
@@ -205,54 +227,6 @@ body {
   }
 }
 
-.keyword_container>div {
-  display: flex;
-  flex-direction: column;
-}
-
-.keyword_container label {
-  font-weight: 700;
-  margin-bottom: 8px;
-  color: #333;
-  font-size: 0.95rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.keyword-input {
-  padding: 12px 16px;
-  border: 2px solid #ddd;
-  border-radius: 10px;
-  font-size: 1rem;
-  transition: all 0.3s ease;
-  background: white;
-  min-height: 20px;
-  outline: none;
-}
-
-/* Placeholder support */
-.keyword-input[data-placeholder]:empty:before {
-  content: attr(data-placeholder);
-  color: #aaa;
-  pointer-events: none;
-}
-
-/* Focus style */
-.keyword-input:focus {
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-  transform: translateY(-1px);
-}
-
-/* Disabled style */
-.keyword-input[contenteditable="false"] {
-  background: #f5f5f5;
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-.keyword-input {
-  direction: ltr;
-  unicode-bidi: plaintext;
-}
 
 
 /* Recording Controls */
@@ -474,6 +448,9 @@ body {
   box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .copy-button:hover {
@@ -668,10 +645,6 @@ input:focus {
   transition: all 0.3s ease;
 }
 
-.close-settings:hover {
-  background: rgba(0, 0, 0, 0.1);
-  color: #333;
-}
 
 /* Active Keywords Display */
 .active-keywords-display {
