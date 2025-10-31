@@ -403,14 +403,16 @@ function App() {
           <h1>Inject Voice Recognition</h1>
           <div className="header-controls">
             <div className={`connection-status ${connectionStatus}`}>Status: {connectionStatus}</div>
-            <button className='logoutBtn' onClick={handleLogout} title='Logout'><LogOut color="white" size={20} strokeWidth={3}/></button>
-            <button
-              className="settings-button"
-              onClick={() => setShowSettings(!showSettings)}
-              title="Settings"
-            >
-              <Settings color="white" size={24} />
-            </button>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
+              <button className='logoutBtn' onClick={handleLogout} title='Logout'><LogOut color="white" size={20} strokeWidth={3} /></button>
+              <button
+                className="settings-button"
+                onClick={() => setShowSettings(!showSettings)}
+                title="Settings"
+              >
+                <Settings color="white" size={24} />
+              </button>
+            </div>
           </div>
         </div>
 
