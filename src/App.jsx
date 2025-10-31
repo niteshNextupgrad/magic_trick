@@ -494,12 +494,12 @@ function App() {
             </div>
           )}
 
-          {magicSpeech && (
+          {/* {!isListening && magicSpeech && (
             <div className="magic-speech-display">
               <h4>Magic Session Speech</h4>
               <p>{magicSpeech}</p>
             </div>
-          )}
+          )} */}
         </div>
 
         <div className="share-info">
