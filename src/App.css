@@ -4,22 +4,6 @@
   box-sizing: border-box;
 }
 
-input,
-textarea,
-[contenteditable] {
-  -webkit-user-select: auto;
-  user-select: auto;
-  -webkit-touch-callout: none;
-}
-
-/* Prevent shake to undo */
-input,
-textarea,
-[contenteditable] {
-  -webkit-user-modify: read-write-plaintext-only;
-}
-
-
 body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
